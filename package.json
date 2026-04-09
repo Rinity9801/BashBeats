@@ -1,0 +1,38 @@
+{
+  "name": "bashbeats",
+  "version": "2.0.0",
+  "description": "Your music. Your terminal.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "serve": "python3 -m http.server 8888"
+  },
+  "build": {
+    "appId": "com.bashbeats.app",
+    "productName": "BashBeats",
+    "mac": {
+      "category": "public.app-category.music",
+      "icon": "icon.icns",
+      "target": "dmg"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "manifest.json",
+      "sw.js",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      { "from": "yt-dlp-bin", "to": "yt-dlp-bin" }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "play-dl": "^1.9.7"
+  }
+}

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#0d1a0d"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <rect x="80" y="80" width="864" height="864" rx="40" fill="none" stroke="#1a8c1a" stroke-width="4" opacity="0.3"/>
+  <!-- Bash -->
+  <text font-family="'Courier New', 'Menlo', monospace" font-size="44" fill="#33ff33" filter="url(#glow)" xml:space="preserve">
+    <tspan x="200" y="330">   ____            __</tspan>
+    <tspan x="200" y="372">  / __ )____ _____/ /_</tspan>
+    <tspan x="200" y="414"> / __  / __ `/ __/ __</tspan>
+    <tspan x="200" y="456">/ /_/ / /_/ (__  / /</tspan>
+    <tspan x="200" y="498">\____/\__,_/____/_/</tspan>
+  </text>
+  <!-- Beats -->
+  <text font-family="'Courier New', 'Menlo', monospace" font-size="44" fill="#33ff33" filter="url(#glow)" xml:space="preserve">
+    <tspan x="140" y="570">   ____             __</tspan>
+    <tspan x="140" y="612">  / __ )___  ____ _/ /______</tspan>
+    <tspan x="140" y="654"> / __  / _ \/ __ `/ __/ ___/</tspan>
+    <tspan x="140" y="696">/ /_/ /  __/ /_/ / /_(__  )</tspan>
+    <tspan x="140" y="738">\____/\___/\__,_/\__/____/</tspan>
+  </text>
+  <!-- Scanlines -->
+  <g opacity="0.05">
+    <line x1="80" y1="250" x2="944" y2="250" stroke="white" stroke-width="1"/>
+    <line x1="80" y1="400" x2="944" y2="400" stroke="white" stroke-width="1"/>
+    <line x1="80" y1="550" x2="944" y2="550" stroke="white" stroke-width="1"/>
+    <line x1="80" y1="700" x2="944" y2="700" stroke="white" stroke-width="1"/>
+    <line x1="80" y1="850" x2="944" y2="850" stroke="white" stroke-width="1"/>
+  </g>
+</svg>

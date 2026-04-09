@@ -1,0 +1,2907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BashBeats</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --green: #33ff33;
+    --dim-green: #1a8c1a;
+    --dark-green: #0a3d0a;
+    --bg: #0a0a0a;
+    --glow: rgba(51, 255, 51, 0.15);
+    --amber: #ffb833;
+    --red: #ff4444;
+    --cyan: #33ffff;
+    --magenta: #ff33ff;
+  }
+
+  html, body { height: 100%; background: #000; overflow: hidden; }
+
+  #crt {
+    position: relative; width: 100%; height: 100%;
+    background: rgba(10, 10, 10, 0.78); overflow: hidden;
+    display: flex; flex-direction: column; z-index: 1;
+  }
+
+  #crt { --scanline-opacity: 0.15; }
+  #crt::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,var(--scanline-opacity)) 2px, rgba(0,0,0,var(--scanline-opacity)) 4px);
+    pointer-events: none; z-index: 10;
+  }
+
+  #crt::after {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none; z-index: 10;
+  }
+
+  #main-area {
+    flex: 1; display: flex; overflow: hidden; position: relative; z-index: 1;
+  }
+
+  #terminal {
+    flex: 1; padding: 20px; padding-bottom: 10px;
+    overflow-y: auto; transition: opacity 0.4s ease;
+    font-family: 'Fira Mono', 'Courier New', monospace; font-size: 14px;
+    color: var(--green); text-shadow: 0 0 5px var(--glow);
+    scrollbar-width: thin; scrollbar-color: var(--dim-green) var(--bg);
+  }
+
+  #terminal::-webkit-scrollbar { width: 6px; }
+  #terminal::-webkit-scrollbar-track { background: var(--bg); }
+  #terminal::-webkit-scrollbar-thumb { background: var(--dim-green); border-radius: 3px; }
+
+  #output .line { margin-bottom: 2px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.5; }
+  #output .line.error { color: var(--red); }
+  #output .line.info { color: var(--cyan); }
+  #output .line.warn { color: var(--amber); }
+  #output .line.dim { color: var(--dim-green); }
+  #output .line.magenta { color: var(--magenta); }
+  #output .line.bold { font-weight: 700; }
+
+  #input-line {
+    display: flex; align-items: center; padding-top: 4px; line-height: 1.5;
+    font-family: 'Fira Mono', 'Courier New', monospace; font-size: 14px;
+  }
+
+  #prompt { color: var(--green); text-shadow: 0 0 5px var(--glow); white-space: pre; flex-shrink: 0; }
+
+  #cmd-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--green); font-family: 'Fira Mono', 'Courier New', monospace; font-size: 14px;
+    text-shadow: 0 0 5px var(--glow); caret-color: var(--green); padding: 0; margin: 0;
+  }
+
+  /* ── Lyrics Panel ── */
+  #lyrics-panel {
+    width: 0; overflow: hidden;
+    border-left: 1px solid var(--dark-green);
+    background: rgba(5, 15, 5, 0.95);
+    font-family: 'Fira Mono', 'Courier New', monospace; font-size: 13px;
+    color: var(--dim-green); text-shadow: 0 0 3px var(--glow);
+    display: flex; flex-direction: column;
+    transition: width 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  #lyrics-panel.open { width: 340px; border-left-color: var(--dim-green); }
+
+  #lyrics-panel .lyrics-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--dark-green);
+    color: var(--green); font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;
+  }
+
+  #lyrics-panel .lyrics-header .lyrics-close {
+    cursor: pointer; color: var(--dim-green); font-size: 14px;
+    background: none; border: none; font-family: inherit;
+    text-shadow: 0 0 5px var(--glow);
+  }
+  #lyrics-panel .lyrics-header .lyrics-close:hover { color: var(--green); }
+
+  #lyrics-body {
+    flex: 1; overflow-y: auto; padding: 16px;
+    scrollbar-width: thin; scrollbar-color: var(--dark-green) transparent;
+  }
+  #lyrics-body::-webkit-scrollbar { width: 4px; }
+  #lyrics-body::-webkit-scrollbar-thumb { background: var(--dark-green); border-radius: 2px; }
+
+  #lyrics-body .lyric-line {
+    padding: 4px 0; line-height: 1.6; transition: color 0.2s, font-size 0.2s;
+    cursor: pointer;
+  }
+  #lyrics-body .lyric-line:hover { color: var(--green); }
+  #lyrics-body .lyric-line.active {
+    color: var(--cyan); font-size: 15px; text-shadow: 0 0 8px rgba(51,255,255,0.3);
+  }
+  #lyrics-body .lyric-line.past { color: var(--dim-green); }
+  /* Plain lyrics (no timestamps) - make them bright and readable */
+  #lyrics-body.plain .lyric-line {
+    color: rgba(255,255,255,0.8); cursor: default;
+  }
+  #lyrics-body.plain .lyric-line:hover { color: #fff; }
+
+  #lyrics-body .lyrics-status {
+    color: var(--dim-green); font-style: italic; font-size: 12px; padding: 20px 0;
+  }
+
+  /* ── Player Bar ── */
+  #player-bar {
+    position: relative; z-index: 5;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 6px 16px 8px;
+    font-family: 'Fira Mono', 'Courier New', monospace; font-size: 13px;
+    color: var(--green);
+    display: flex; flex-direction: column; gap: 6px;
+    background: rgba(5, 20, 5, 0.9); flex-shrink: 0;
+  }
+
+  /* Top: track name + progress */
+  #player-bar .track-info { width: 100%; }
+  #player-bar .track-name {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 4px;
+  }
+  #player-bar .progress-row { display: flex; align-items: center; gap: 8px; }
+  #player-bar .progress-bar {
+    flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px;
+    cursor: pointer; position: relative; overflow: hidden;
+  }
+  #player-bar .progress-fill {
+    height: 100%; background: var(--green); border-radius: 2px; width: 0%;
+    transition: width 0.3s linear;
+  }
+  #player-bar .time {
+    font-size: 11px; color: rgba(255,255,255,0.4); flex-shrink: 0; min-width: 80px; text-align: right;
+  }
+
+  /* Bottom: controls row */
+  #player-bar .bar-row {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+  }
+  #player-bar .controls { display: flex; gap: 2px; flex-shrink: 0; }
+  #player-bar .controls button {
+    background: none; border: none; color: rgba(255,255,255,0.9);
+    padding: 6px; cursor: pointer; border-radius: 6px; transition: all 0.15s;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #player-bar .controls button svg { width: 24px; height: 24px; }
+  #player-bar .controls button:hover { color: #fff; background: rgba(255,255,255,0.08); }
+
+  .bar-btn-sm {
+    background: none !important; border: none !important;
+    color: rgba(255,255,255,0.5) !important; padding: 6px !important;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.2s; border-radius: 6px;
+  }
+  .bar-btn-sm svg { display: block; width: 18px; height: 18px; }
+  .bar-btn-sm:hover { color: var(--green) !important; background: rgba(255,255,255,0.06) !important; }
+
+  .bar-spacer { flex: 1; }
+
+  #player-bar .volume-wrap {
+    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+    color: rgba(255,255,255,0.4);
+  }
+  #player-bar .volume-wrap svg { width: 16px; height: 16px; }
+  #player-bar .volume-wrap input[type="range"] {
+    -webkit-appearance: none; width: 60px; height: 3px;
+    background: rgba(255,255,255,0.15); border-radius: 2px; outline: none;
+  }
+  #player-bar .volume-wrap input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px;
+    background: var(--green); border-radius: 50%; cursor: pointer;
+  }
+
+  .hidden { display: none !important; }
+
+  #drop-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 10, 0, 0.85); z-index: 100;
+    justify-content: center; align-items: center;
+    font-family: 'Fira Mono', monospace; font-size: 24px;
+    color: var(--green); text-shadow: 0 0 20px var(--glow);
+    border: 3px dashed var(--green); margin: 20px; border-radius: 10px;
+  }
+  #drop-overlay.active { display: flex; }
+
+  @keyframes flicker {
+    0% { opacity: 0; } 5% { opacity: 0.8; } 10% { opacity: 0.2; }
+    15% { opacity: 0.9; } 20% { opacity: 0.5; } 30% { opacity: 1; } 100% { opacity: 1; }
+  }
+  #crt.booting { animation: flicker 1.2s ease-out; }
+
+  #file-input { display: none; }
+
+
+  /* Lyrics editor overlay */
+  #lyrics-editor-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 5, 0, 0.92); z-index: 100;
+    justify-content: center; align-items: center; padding: 40px;
+  }
+  #lyrics-editor-overlay.active { display: flex; }
+
+  #lyrics-editor-box {
+    width: 100%; max-width: 600px; max-height: 80vh;
+    display: flex; flex-direction: column; gap: 10px;
+    font-family: 'Fira Mono', monospace;
+  }
+
+  #lyrics-editor-box .editor-title {
+    color: var(--green); font-size: 14px; text-shadow: 0 0 5px var(--glow);
+  }
+
+  #lyrics-editor-box textarea {
+    flex: 1; min-height: 300px; background: var(--bg); color: var(--green);
+    border: 1px solid var(--dim-green); border-radius: 4px; padding: 12px;
+    font-family: 'Fira Mono', monospace; font-size: 13px; resize: vertical;
+    outline: none; text-shadow: 0 0 3px var(--glow);
+  }
+  #lyrics-editor-box textarea:focus { border-color: var(--green); }
+
+  #lyrics-editor-box .editor-actions { display: flex; gap: 10px; }
+  #lyrics-editor-box .editor-actions button {
+    background: none; border: 1px solid var(--dim-green); color: var(--green);
+    font-family: 'Fira Mono', monospace; font-size: 13px; padding: 6px 16px;
+    cursor: pointer; border-radius: 3px; text-shadow: 0 0 5px var(--glow);
+  }
+  #lyrics-editor-box .editor-actions button:hover {
+    background: var(--dark-green); border-color: var(--green);
+  }
+  #lyrics-editor-box .editor-hint { color: var(--dim-green); font-size: 11px; }
+
+  /* ── Background Art ── */
+  #bg-art {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 0;
+    overflow: hidden;
+    opacity: 0; transition: opacity 1.5s ease;
+    will-change: opacity;
+    pointer-events: none;
+  }
+  #bg-art.active { opacity: 1; }
+  #bg-art #bg-yt-player, #bg-art iframe {
+    position: absolute; top: 50%; left: 50%;
+    width: 300vw; height: 300vh;
+    transform: translate(-50%, -50%);
+    filter: brightness(0.4) saturate(1.3);
+    border: none;
+  }
+  #bg-art .bg-thumb {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: cover;
+    filter: blur(6px) brightness(0.4) saturate(1.3);
+    pointer-events: none;
+  }
+
+  /* ── Fullscreen Lyrics ── */
+  #lyrics-fs {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 200; background: rgba(0, 3, 0, 0.6);
+    flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Fira Mono', monospace;
+    overflow: hidden;
+  }
+  #lyrics-fs.active { display: flex; }
+
+  #lyrics-fs .fs-close {
+    position: absolute; top: 20px; right: 28px;
+    background: none; border: 1px solid var(--dim-green); color: var(--dim-green);
+    font-family: 'Fira Mono', monospace; font-size: 12px; padding: 4px 12px;
+    cursor: pointer; border-radius: 3px; z-index: 5;
+    transition: all 0.2s;
+  }
+  #lyrics-fs .fs-close:hover { color: var(--green); border-color: var(--green); }
+
+  #lyrics-fs .fs-track {
+    position: absolute; top: 28px; left: 0; right: 0; text-align: center;
+    color: var(--dim-green); font-size: 13px;
+    text-shadow: 0 0 5px var(--glow);
+    opacity: 0.7;
+  }
+
+  #lyrics-fs .fs-body {
+    width: 100%; max-width: 800px; max-height: 70vh;
+    overflow: hidden; text-align: center;
+    padding: 40px 20px; position: relative;
+    mask-image: linear-gradient(transparent 0%, black 20%, black 80%, transparent 100%);
+    -webkit-mask-image: linear-gradient(transparent 0%, black 20%, black 80%, transparent 100%);
+  }
+
+  #lyrics-fs .fs-scroll {
+    transition: transform 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .fs-line {
+    font-size: 22px; padding: 14px 8px; line-height: 1.5;
+    color: var(--dim-green); opacity: 0.35;
+    transition: color 0.4s ease, opacity 0.4s ease, transform 0.4s ease, text-shadow 0.4s ease;
+    transform: scale(0.88);
+    transform-origin: center;
+  }
+  .fs-line.active {
+    color: var(--cyan); opacity: 1;
+    transform: scale(1.1);
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+  .fs-line.past { color: var(--dark-green); opacity: 0.15; transform: scale(0.85); }
+  /* Plain lyrics in fullscreen - all visible */
+  .fs-line.plain-line { color: rgba(255,255,255,0.75); opacity: 0.85; transform: scale(1); font-size: 20px; }
+
+  #lyrics-fs .fs-no-lyrics {
+    color: var(--dim-green); font-size: 16px; opacity: 0.5;
+  }
+
+  /* ── Animations ── */
+  @keyframes glowPulse {
+    0%, 100% { text-shadow: 0 0 8px rgba(51,255,255,0.3); }
+    50% { text-shadow: 0 0 20px rgba(51,255,255,0.5), 0 0 40px rgba(51,255,255,0.15); }
+  }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes progressGlow {
+    0%, 100% { box-shadow: 0 0 4px var(--green); }
+    50% { box-shadow: 0 0 10px var(--green), 0 0 20px var(--glow); }
+  }
+
+  @keyframes subtleFlicker {
+    0% { opacity: 1; } 50% { opacity: 0.97; } 100% { opacity: 1; }
+  }
+
+  /* Lyric line entrance in side panel */
+  #lyrics-body .lyric-line {
+    animation: fadeSlideUp 0.3s ease both;
+  }
+
+  /* Active lyric glow in side panel */
+  #lyrics-body .lyric-line.active {
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+
+  /* Progress bar glow when playing */
+  .progress-fill.playing {
+    box-shadow: 0 0 6px var(--green);
+    animation: progressGlow 3s ease-in-out infinite;
+  }
+
+  /* Button glow on hover */
+  #player-bar .controls button:hover, #player-bar .bar-btn:hover {
+    box-shadow: 0 0 8px var(--glow);
+  }
+
+  /* Track name fade transition */
+  #player-bar .track-name {
+    transition: opacity 0.3s ease;
+  }
+
+  /* Smoother lyrics panel slide */
+  #lyrics-panel { transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+
+  /* Logo */
+  #logo {
+    font-family: 'Fira Mono', monospace; font-size: 11px; line-height: 1.2;
+    color: var(--green); text-shadow: 0 0 8px var(--glow);
+    padding: 12px 20px 8px; white-space: pre; opacity: 0.5;
+    pointer-events: none; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* Cinema mode - full video, no filters */
+  #crt.cinema { background: transparent !important; }
+  #crt.cinema::before, #crt.cinema::after { display: none; }
+  #crt.cinema #terminal { opacity: 0; pointer-events: none; }
+  #crt.cinema #lyrics-panel { opacity: 0; pointer-events: none; }
+  #bg-art.cinema iframe, #bg-art.cinema #bg-yt-player,
+  #bg-art.cinema .bg-thumb, #bg-art.cinema #bg-video-proxy {
+    filter: none !important;
+  }
+
+  /* CRT command flash */
+  #crt.cmd-flash { animation: subtleFlicker 0.15s ease; }
+
+  /* ── Splash Screen ── */
+  #splash {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 500; background: #000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none;
+    font-family: 'Fira Mono', monospace;
+  }
+  #splash .splash-logo {
+    color: var(--green); font-size: 14px; line-height: 1.3;
+    text-shadow: 0 0 10px var(--glow);
+    white-space: pre; text-align: center;
+    margin-bottom: 40px;
+  }
+  #splash .splash-enter {
+    color: var(--green); font-size: 16px;
+    text-shadow: 0 0 10px var(--glow);
+    animation: splashPulse 2s ease-in-out infinite;
+  }
+  #splash .splash-sub {
+    color: var(--dim-green); font-size: 11px; margin-top: 12px;
+  }
+  @keyframes splashPulse {
+    0%, 100% { opacity: 0.6; } 50% { opacity: 1; }
+  }
+  #splash.hidden { display: none; }
+
+  /* ── Sync Overlay ── */
+  #sync-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 250; background: rgba(0, 3, 0, 0.95);
+    justify-content: center; align-items: center;
+    font-family: 'Fira Mono', monospace;
+  }
+  #sync-overlay.active { display: flex; }
+
+  .sync-box {
+    width: 90%; max-width: 750px; display: flex; flex-direction: column;
+    align-items: center; gap: 16px;
+  }
+  .sync-box .sync-title {
+    color: var(--green); font-size: 16px; letter-spacing: 3px;
+    text-shadow: 0 0 10px var(--glow);
+  }
+  .sync-box .sync-track {
+    color: var(--dim-green); font-size: 13px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sync-box canvas {
+    width: 100%; height: 100px; border: 1px solid var(--dark-green);
+    border-radius: 4px; cursor: pointer;
+  }
+  .sync-box .sync-time {
+    color: var(--cyan); font-size: 28px;
+    text-shadow: 0 0 12px rgba(51,255,255,0.3);
+    font-variant-numeric: tabular-nums;
+  }
+  .sync-box .sync-hint {
+    color: var(--green); font-size: 13px;
+    text-shadow: 0 0 5px var(--glow);
+  }
+  .sync-box .sync-hint.dim { color: var(--dim-green); font-size: 11px; }
+  .sync-box .sync-markers {
+    display: flex; justify-content: space-between; width: 100%;
+    color: var(--dark-green); font-size: 10px; margin-top: -10px;
+  }
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="splash-logo">   ____            __   ____             __
+  / __ )____ _____/ /_ / __ )___  ____ _/ /______
+ / __  / __ `/ __/ __ / __  / _ \/ __ `/ __/ ___/
+/ /_/ / /_/ (__  / / // /_/ /  __/ /_/ / /_(__  )
+\____/\__,_/____/_/ /\____/\___/\__,_/\__/____/</div>
+  <div class="splash-enter">[ click anywhere to enter ]</div>
+  <div class="splash-sub">your music. your terminal.</div>
+</div>
+
+<div id="bg-art">
+  <img class="bg-thumb" id="bg-thumb" src="" alt="" style="display:none">
+  <div id="bg-yt-player"></div>
+</div>
+<div id="crt" class="booting">
+  <div id="main-area">
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <div id="logo">   ____            __   ____             __
+  / __ )____ _____/ /_ / __ )___  ____ _/ /______
+ / __  / __ `/ __/ __ / __  / _ \/ __ `/ __/ ___/
+/ /_/ / /_/ (__  / / // /_/ /  __/ /_/ / /_(__  )
+\____/\__,_/____/_/ /\____/\___/\__,_/\__/____/</div>
+    <div id="terminal">
+      <div id="output"></div>
+      <div id="input-line">
+        <span id="prompt"></span>
+        <input id="cmd-input" type="text" autofocus autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    </div>
+    <div id="lyrics-panel">
+      <div class="lyrics-header">
+        <span>// lyrics</span>
+        <button class="lyrics-close" id="lyrics-close-btn">x</button>
+      </div>
+      <div id="lyrics-body">
+        <div class="lyrics-status">No track playing</div>
+      </div>
+    </div>
+  </div>
+  <div id="player-bar">
+    <div class="track-info">
+      <div class="track-name" id="track-name">No track loaded</div>
+      <div class="progress-row">
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <span class="time" id="time-display">0:00 / 0:00</span>
+      </div>
+    </div>
+    <div class="bar-row">
+      <div class="controls">
+        <button id="btn-prev" title="Previous"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+        <button id="btn-play" title="Play/Pause"><svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="btn-next" title="Next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+      </div>
+      <button class="bar-btn-sm" id="btn-shuffle" title="Shuffle"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+      <button class="bar-btn-sm" id="btn-repeat" title="Repeat"><svg id="repeat-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>
+      <button class="bar-btn-sm" id="btn-lyrics" title="Lyrics"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6zm2-6h8v2H8v-2zm0-4h8v2H8v-2z"/></svg></button>
+      <button class="bar-btn-sm" id="btn-fs" title="Fullscreen Lyrics"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
+      <button class="bar-btn-sm" id="btn-hide" title="Hide Terminal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
+      <button class="bar-btn-sm" id="btn-cinema" title="Cinema Mode"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></button>
+      <div class="bar-spacer"></div>
+      <div class="volume-wrap">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+        <input type="range" id="volume" min="0" max="100" value="80">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="drop-overlay">[ DROP AUDIO FILES TO IMPORT ]</div>
+<input type="file" id="file-input" multiple accept="audio/*">
+
+<div id="lyrics-editor-overlay">
+  <div id="lyrics-editor-box">
+    <div class="editor-title" id="editor-title">Edit Lyrics</div>
+    <div class="editor-hint">Paste plain lyrics, or synced LRC format: [mm:ss.xx] line</div>
+    <textarea id="lyrics-textarea" placeholder="Paste lyrics here..."></textarea>
+    <div class="editor-actions">
+      <button id="editor-save">Save (Ctrl+Enter)</button>
+      <button id="editor-cancel">Cancel (Esc)</button>
+    </div>
+  </div>
+</div>
+
+<div id="sync-overlay">
+  <div class="sync-box">
+    <div class="sync-title">// SYNC MODE</div>
+    <div class="sync-track" id="sync-track-name"></div>
+    <canvas id="sync-canvas"></canvas>
+    <div class="sync-markers" id="sync-markers"></div>
+    <div class="sync-time" id="sync-time">0:00</div>
+    <div class="sync-hint">Press ENTER when you hear the first lyric</div>
+    <div class="sync-hint dim">Press E to mark end of song | ESC to cancel</div>
+  </div>
+</div>
+
+<div id="lyrics-fs">
+  <button class="fs-close" id="fs-close-btn">ESC</button>
+  <div class="fs-track" id="fs-track-name"></div>
+  <div class="fs-body">
+    <div class="fs-scroll" id="fs-scroll"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════
+const DB_NAME = 'bashbeats';
+const DB_VERSION = 1;
+let db = null;
+
+let fs = {};
+let cwd = '~';
+let cmdHistory = [];
+let historyIdx = -1;
+let currentTrack = null;
+let shuffleOn = false;
+let repeatMode = 0;
+let lyricsOpen = false;
+let currentLyrics = null; // { synced: [{time, text}], plain: string }
+let lyricsPollTimer = null;
+let lyricsFullscreen = false;
+let lyricsOffset = 0; // seconds offset for lyrics sync
+
+// DOM refs
+const output = document.getElementById('output');
+const cmdInput = document.getElementById('cmd-input');
+const promptEl = document.getElementById('prompt');
+const terminal = document.getElementById('terminal');
+const progressFill = document.getElementById('progress-fill');
+const progressBar = document.getElementById('progress-bar');
+const timeDisplay = document.getElementById('time-display');
+const trackNameEl = document.getElementById('track-name');
+const volumeSlider = document.getElementById('volume');
+const btnPlay = document.getElementById('btn-play');
+const btnPrev = document.getElementById('btn-prev');
+const btnNext = document.getElementById('btn-next');
+const btnShuffle = document.getElementById('btn-shuffle');
+const btnRepeat = document.getElementById('btn-repeat');
+const btnLyrics = document.getElementById('btn-lyrics');
+const fileInput = document.getElementById('file-input');
+const dropOverlay = document.getElementById('drop-overlay');
+const lyricsPanel = document.getElementById('lyrics-panel');
+const lyricsBody = document.getElementById('lyrics-body');
+const lyricsCloseBtn = document.getElementById('lyrics-close-btn');
+const lyricsEditorOverlay = document.getElementById('lyrics-editor-overlay');
+const lyricsTextarea = document.getElementById('lyrics-textarea');
+const editorTitle = document.getElementById('editor-title');
+const bgArt = document.getElementById('bg-art');
+const lyricsFS = document.getElementById('lyrics-fs');
+const fsTrackName = document.getElementById('fs-track-name');
+const fsScroll = document.getElementById('fs-scroll');
+const btnFS = document.getElementById('btn-fs');
+const fsCloseBtn = document.getElementById('fs-close-btn');
+
+// ═══════════════════════════════════════════════════════════
+// Player — HTML5 Audio for local files, YouTube IFrame API for YT tracks
+// The YT IFrame is both the audio source AND background video
+// ═══════════════════════════════════════════════════════════
+const player = {
+  _audio: new Audio(),
+  _yt: null,
+  _ytReady: false,
+  _ytPending: null, // videoId to play once ready
+  _source: null, // 'local' | 'youtube'
+  _playing: false,
+  _volume: 0.8,
+  _pollTimer: null,
+
+  init() {
+    this._audio.volume = this._volume;
+    this._audio.addEventListener('timeupdate', () => {
+      if (this._source !== 'local') return;
+      this._onTimeUpdate(this._audio.currentTime, this._audio.duration);
+    });
+    this._audio.addEventListener('ended', () => {
+      if (this._source !== 'local') return;
+      this._onEnded();
+    });
+    this._audio.addEventListener('play', () => { if (this._source === 'local') this._setPlaying(true); });
+    this._audio.addEventListener('pause', () => { if (this._source === 'local') this._setPlaying(false); });
+    this._audio.addEventListener('error', () => {
+      // Only show error if we're not in the middle of switching tracks
+      if (this._audio.src && this._source === 'local' && !this._switching) {
+        print('Audio stream error. Try "play" again.', 'error');
+      }
+    });
+    // Load YouTube IFrame API
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  },
+
+  _initYT() {
+    this._yt = new YT.Player('bg-yt-player', {
+      width: '100%', height: '100%',
+      playerVars: {
+        autoplay: 1, controls: 1, showinfo: 0, rel: 0, modestbranding: 1,
+        disablekb: 1, iv_load_policy: 3, playsinline: 1, fs: 0,
+        origin: location.origin,
+      },
+      events: {
+        onReady: () => {
+          this._ytReady = true;
+          // silently ready
+          if (this._ytPending) {
+            // Primary player (unmuted) - needs user click
+            const vid = this._ytPending;
+            this._ytPending = null;
+            this._yt.unMute();
+            this._yt.setVolume(this._volume * 100);
+            this._yt.loadVideoById(vid);
+          } else if (this._ytPendingBg) {
+            // Background video only (muted)
+            const vid = this._ytPendingBg;
+            this._ytPendingBg = null;
+            this._yt.mute();
+            this._yt.loadVideoById(vid);
+          }
+        },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.PLAYING) {
+            const iframe = document.querySelector('#bg-art iframe');
+            if (iframe) iframe.style.display = '';
+            if (this._source === 'youtube') {
+              this._setPlaying(true);
+              this._startPoll();
+            } else if (this._source === 'local') {
+              // Background video just started - sync to audio position
+              const audioTime = this._audio.currentTime;
+              const audioDur = this._audio.duration;
+              const ytDur = this._yt.getDuration();
+              if (audioTime && audioDur && ytDur) {
+                this._yt.seekTo((audioTime / audioDur) * ytDur, true);
+              }
+            }
+            bgArt.classList.remove('needs-click');
+          } else if (e.data === YT.PlayerState.PAUSED) {
+            if (this._source === 'youtube') {
+              this._setPlaying(false);
+              this._stopPoll();
+            }
+          } else if (e.data === YT.PlayerState.ENDED) {
+            this._stopPoll();
+            this._onEnded();
+          }
+        },
+        onError: () => {
+          // Hide the broken iframe
+          const iframe = document.querySelector('#bg-art iframe');
+          if (iframe) iframe.style.display = 'none';
+          // Try streaming video via local yt-dlp proxy
+          if (currentTrack) {
+            const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+            if (song && song.videoId) {
+              playBackgroundVideoProxy(song.videoId);
+            }
+          }
+        }
+      }
+    });
+  },
+
+  _startPoll() {
+    this._stopPoll();
+    this._pollTimer = setInterval(() => {
+      if (!this._yt || !this._ytReady || this._source !== 'youtube') return;
+      try {
+        const t = this._yt.getCurrentTime();
+        const d = this._yt.getDuration();
+        this._onTimeUpdate(t, d);
+      } catch(e) {}
+    }, 250);
+  },
+
+  _stopPoll() {
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+  },
+
+  _onTimeUpdate(t, d) {
+    if (!d) return;
+    progressFill.style.width = (t / d * 100) + '%';
+    timeDisplay.textContent = formatTime(t) + ' / ' + formatTime(d);
+    updateLyricsHighlight(t);
+    // Check end point
+    if (currentTrack) {
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song && song.endTime && t >= song.endTime) playNext();
+        // Preload next song 30s before end
+        if (d - t < 30 && d - t > 28) preloadNext();
+    }
+  },
+
+  _onEnded() {
+    this._setPlaying(false);
+    this._stopPoll();
+    if (repeatMode === 2) { this.seek(0); this.play(); }
+    else playNext();
+  },
+
+  _setPlaying(val) {
+    this._playing = val;
+    btnPlay.innerHTML = val
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    progressFill.classList.toggle('playing', val);
+  },
+
+  // Play a local audio blob
+  playBlob(blob) {
+    this._stopYT();
+    this._source = 'local';
+    this._audio.src = URL.createObjectURL(blob);
+    this._audio.play();
+  },
+
+  _playGen: 0,
+
+  async playYouTube(videoId, preloaded) {
+    const gen = ++this._playGen;
+    this._stopYT();
+    this._stopLocal();
+    this._source = 'local';
+
+    // 0) Use preloaded URL if available (instant transition)
+    if (preloaded && preloaded.audioURL) {
+      this._audio.src = preloaded.audioURL;
+      this._audio.play();
+      bgArt.classList.add('active');
+      if (this._ytReady && this._yt) { this._yt.mute(); this._yt.loadVideoById(videoId); }
+      else { this._ytPendingBg = videoId; }
+      return;
+    }
+
+    // 1) Try local ytdl proxy (Electron app — most reliable)
+    try {
+      const resp = await fetch('http://127.0.0.1:18899/stream/' + videoId);
+      if (gen !== this._playGen) return; // user switched songs, abort
+      if (resp.ok) {
+        const data = await resp.json();
+        if (gen !== this._playGen) return;
+        if (data.url) {
+          this._audio.src = data.url;
+          this._audio.play();
+          // Background video via YT IFrame (muted)
+          bgArt.classList.add('active');
+          if (this._ytReady && this._yt) { this._yt.mute(); this._yt.loadVideoById(videoId); }
+          else { this._ytPendingBg = videoId; }
+          return;
+        }
+      }
+    } catch(e) { /* not running as Electron app, try web fallbacks */ }
+
+    // 2) Try Piped/Invidious streaming (web fallback)
+    print('Loading stream...', 'dim');
+    const streams = await fetchYouTubeStreams(videoId);
+    if (gen !== this._playGen) return;
+    if (streams && streams.audioURL) {
+      this._audio.src = streams.audioURL;
+      this._audio.play();
+      bgArt.classList.add('active');
+      if (this._ytReady && this._yt) { this._yt.mute(); this._yt.loadVideoById(videoId); }
+      else { this._ytPendingBg = videoId; }
+      return;
+    }
+
+    // 3) YouTube IFrame as last resort
+    print('Using YouTube player...', 'dim');
+    this._source = 'youtube';
+    bgArt.classList.add('active');
+    if (this._ytReady && this._yt) {
+      this._yt.unMute();
+      this._yt.setVolume(this._volume * 100);
+      this._yt.loadVideoById(videoId);
+    } else {
+      this._ytPending = videoId;
+    }
+  },
+
+  _stopLocal() { this._switching = true; this._audio.pause(); this._audio.src = ''; setTimeout(() => this._switching = false, 500); },
+  _stopYT() {
+    this._stopPoll();
+    if (this._yt && this._ytReady) { try { this._yt.stopVideo(); } catch(e) {} }
+  },
+
+  play() {
+    if (this._source === 'youtube' && this._yt && this._ytReady) this._yt.playVideo();
+    else if (this._source === 'local') this._audio.play();
+    // Resume background video
+    if (this._source === 'local' && this._yt && this._ytReady) try { this._yt.playVideo(); } catch(e) {}
+    if (_bgVideoEl) _bgVideoEl.play().catch(() => {});
+  },
+  pause() {
+    if (this._source === 'youtube' && this._yt && this._ytReady) this._yt.pauseVideo();
+    else if (this._source === 'local') this._audio.pause();
+    // Pause background video
+    if (this._source === 'local' && this._yt && this._ytReady) try { this._yt.pauseVideo(); } catch(e) {}
+    if (_bgVideoEl) _bgVideoEl.pause();
+  },
+  stop() {
+    if (this._source === 'youtube') this._stopYT();
+    else { this._audio.pause(); this._audio.currentTime = 0; }
+    if (_bgVideoEl) { _bgVideoEl.pause(); _bgVideoEl.currentTime = 0; }
+    this._setPlaying(false);
+  },
+  seek(time) {
+    if (this._source === 'youtube' && this._yt && this._ytReady) this._yt.seekTo(time, true);
+    else if (this._source === 'local') this._audio.currentTime = time;
+    // Sync background video (YT IFrame or proxy video)
+    this._syncBgVideo(time);
+  },
+  _syncBgVideo(time) {
+    const dur = this.getDuration();
+    if (!dur) return;
+    const ratio = time / dur;
+    // Sync YT IFrame background (muted)
+    if (this._source === 'local' && this._yt && this._ytReady) {
+      try { const ytDur = this._yt.getDuration(); if (ytDur) this._yt.seekTo(ratio * ytDur, true); } catch(e) {}
+    }
+    // Sync proxy video element
+    if (_bgVideoEl && _bgVideoEl.duration) {
+      try { _bgVideoEl.currentTime = ratio * _bgVideoEl.duration; } catch(e) {}
+    }
+  },
+  setVolume(v) {
+    this._volume = v;
+    this._audio.volume = v;
+    if (this._yt && this._ytReady) this._yt.setVolume(v * 100);
+  },
+  getCurrentTime() {
+    if (this._source === 'youtube' && this._yt && this._ytReady) return this._yt.getCurrentTime() || 0;
+    return this._audio.currentTime || 0;
+  },
+  getDuration() {
+    if (this._source === 'youtube' && this._yt && this._ytReady) return this._yt.getDuration() || 0;
+    return this._audio.duration || 0;
+  },
+  isPlaying() { return this._playing; },
+};
+
+// ═══════════════════════════════════════════════════════════
+// IndexedDB
+// ═══════════════════════════════════════════════════════════
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('audio')) d.createObjectStore('audio', { keyPath: 'id' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = e => reject(e);
+  });
+}
+
+function storeAudioBlob(id, blob) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('audio', 'readwrite');
+    tx.objectStore('audio').put({ id, blob });
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e);
+  });
+}
+
+function getAudioBlob(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('audio', 'readonly');
+    const req = tx.objectStore('audio').get(id);
+    req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+    req.onerror = e => reject(e);
+  });
+}
+
+function deleteAudioBlob(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('audio', 'readwrite');
+    tx.objectStore('audio').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// FS Persistence
+// ═══════════════════════════════════════════════════════════
+function saveFS() { localStorage.setItem('bashbeats_fs', JSON.stringify(fs)); }
+function loadFS() { const d = localStorage.getItem('bashbeats_fs'); fs = d ? JSON.parse(d) : {}; }
+
+// ═══════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════
+function genId() { return 'bb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+function getCurrentPlaylist() { return cwd === '~' ? null : (fs[cwd] || null); }
+function formatTime(sec) {
+  if (isNaN(sec) || !isFinite(sec)) return '0:00';
+  return Math.floor(sec / 60) + ':' + Math.floor(sec % 60).toString().padStart(2, '0');
+}
+function sanitizeName(name) { return name.replace(/[^a-zA-Z0-9_\-. ]/g, '').trim(); }
+function fileBaseName(fn) { return fn.replace(/\.[^.]+$/, ''); }
+function updatePrompt() {
+  promptEl.textContent = 'user@bashbeats:' + (cwd === '~' ? '~' : '~/playlists/' + cwd) + '$ ';
+}
+function scrollToBottom() { terminal.scrollTop = terminal.scrollHeight; }
+
+// YouTube URL parsing
+function parseYouTubeURL(url) {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/ // bare video ID
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function parseYouTubePlaylistId(url) {
+  const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// LRC Parser
+// ═══════════════════════════════════════════════════════════
+function parseLRC(lrc) {
+  if (!lrc) return null;
+  const lines = lrc.split('\n');
+  const result = [];
+  for (const line of lines) {
+    const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\]\s*(.*)/);
+    if (match) {
+      const min = parseInt(match[1]);
+      const sec = parseInt(match[2]);
+      const ms = parseInt(match[3].padEnd(3, '0'));
+      const time = min * 60 + sec + ms / 1000;
+      result.push({ time, text: match[4] });
+    }
+  }
+  return result.length > 0 ? result : null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Lyrics Fetching & Display
+// ═══════════════════════════════════════════════════════════
+async function fetchLyrics(trackName, artistName) {
+  // 1) Try lrclib (synced lyrics)
+  try {
+    if (artistName && trackName) {
+      const params = new URLSearchParams({ artist_name: artistName, track_name: trackName });
+      const resp = await fetch('https://lrclib.net/api/get?' + params);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.syncedLyrics || data.plainLyrics) return data;
+      }
+    }
+    const q = (trackName + ' ' + (artistName || '')).trim();
+    const resp2 = await fetch('https://lrclib.net/api/search?q=' + encodeURIComponent(q));
+    if (resp2.ok) {
+      const results = await resp2.json();
+      if (results.length > 0) return results[0];
+    }
+  } catch (e) {}
+
+  // 2) Fall back to lyrics.ovh via local proxy (plain lyrics, huge database)
+  try {
+    const params = new URLSearchParams({ artist: artistName || trackName, title: trackName });
+    const resp = await fetch('http://127.0.0.1:18899/lyrics?' + params);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.lyrics) {
+        return { plainLyrics: data.lyrics, syncedLyrics: null };
+      }
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+function setCurrentLyrics(syncedLrc, plainText) {
+  const synced = parseLRC(syncedLrc);
+  currentLyrics = { synced, plain: plainText || null };
+  renderLyricsPanel();
+  if (lyricsFullscreen) renderFullscreenLyrics();
+}
+
+function clearLyrics() {
+  currentLyrics = null;
+  lyricsBody.innerHTML = '<div class="lyrics-status">No lyrics available</div>';
+  if (lyricsFullscreen) renderFullscreenLyrics();
+}
+
+function renderLyricsPanel() {
+  lyricsBody.innerHTML = '';
+  lyricsBody.classList.remove('plain');
+  if (!currentLyrics) {
+    lyricsBody.innerHTML = '<div class="lyrics-status">No lyrics available</div>';
+    return;
+  }
+  if (currentLyrics.synced) {
+    currentLyrics.synced.forEach((line, i) => {
+      const div = document.createElement('div');
+      div.className = 'lyric-line';
+      div.textContent = line.text || '...';
+      div.dataset.index = i;
+      div.dataset.time = line.time;
+      div.style.animationDelay = (i * 0.03) + 's';
+      div.addEventListener('click', () => player.seek(line.time));
+      lyricsBody.appendChild(div);
+    });
+  } else if (currentLyrics.plain) {
+    lyricsBody.classList.add('plain');
+    currentLyrics.plain.split('\n').forEach((line, i) => {
+      const div = document.createElement('div');
+      div.className = 'lyric-line';
+      div.textContent = line || ' ';
+      div.style.animationDelay = (i * 0.03) + 's';
+      lyricsBody.appendChild(div);
+    });
+  } else {
+    lyricsBody.innerHTML = '<div class="lyrics-status">No lyrics found</div>';
+  }
+}
+
+function updateLyricsHighlight(time) {
+  if (!currentLyrics || !currentLyrics.synced) return;
+  const adjusted = time - lyricsOffset;
+  const lines = lyricsBody.querySelectorAll('.lyric-line');
+  let activeIdx = -1;
+  for (let i = currentLyrics.synced.length - 1; i >= 0; i--) {
+    if (adjusted >= currentLyrics.synced[i].time) { activeIdx = i; break; }
+  }
+  lines.forEach((el, i) => {
+    el.classList.toggle('active', i === activeIdx);
+    el.classList.toggle('past', i < activeIdx);
+  });
+  if (activeIdx >= 0 && lines[activeIdx]) {
+    lines[activeIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  // Also update fullscreen lyrics
+  updateFullscreenHighlight(time);
+}
+
+function toggleLyrics() {
+  lyricsOpen = !lyricsOpen;
+  lyricsPanel.classList.toggle('open', lyricsOpen);
+  btnLyrics.style.color = lyricsOpen ? 'var(--cyan)' : '';
+  btnLyrics.style.borderColor = lyricsOpen ? 'var(--cyan)' : '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// Background Art
+// ═══════════════════════════════════════════════════════════
+let _bgVideoEl = null;
+let _bgVideoGen = 0; // generation counter to ignore stale loads
+
+function playBackgroundVideoProxy(videoId) {
+  const gen = ++_bgVideoGen;
+  try {
+    fetch('http://127.0.0.1:18899/video/' + videoId).then(async r => {
+      if (!r.ok || gen !== _bgVideoGen) return; // stale, ignore
+      const data = await r.json();
+      if (!data.url || gen !== _bgVideoGen) return;
+      if (!_bgVideoEl) {
+        _bgVideoEl = document.createElement('video');
+        _bgVideoEl.id = 'bg-video-proxy';
+        _bgVideoEl.muted = true;
+        _bgVideoEl.loop = true;
+        _bgVideoEl.playsInline = true;
+        _bgVideoEl.autoplay = true;
+        _bgVideoEl.setAttribute('muted', '');
+        _bgVideoEl.crossOrigin = 'anonymous';
+        _bgVideoEl.style.cssText = 'position:absolute;top:50%;left:50%;min-width:100%;min-height:100%;width:auto;height:auto;transform:translate(-50%,-50%);object-fit:cover;filter:brightness(0.4) saturate(1.3);pointer-events:none;';
+        // Sync to audio position when video starts playing
+        _bgVideoEl.addEventListener('playing', () => {
+          const a = player._audio;
+          if (a.duration && _bgVideoEl.duration) {
+            _bgVideoEl.currentTime = (a.currentTime / a.duration) * _bgVideoEl.duration;
+          }
+        });
+        bgArt.appendChild(_bgVideoEl);
+      }
+      _bgVideoEl.src = data.url;
+      _bgVideoEl.play().catch(() => {});
+    }).catch(() => {});
+  } catch(e) {}
+}
+
+function stopBackgroundVideoProxy() {
+  _bgVideoGen++; // cancel any pending fetches
+  if (_bgVideoEl) { _bgVideoEl.pause(); _bgVideoEl.src = ''; }
+}
+
+function updateBackgroundArt(song) {
+  const thumb = document.getElementById('bg-thumb');
+  if (song && song.source === 'youtube' && song.videoId) {
+    const thumbURL = 'https://img.youtube.com/vi/' + song.videoId + '/maxresdefault.jpg';
+    thumb.src = thumbURL;
+    thumb.style.display = 'block';
+    // bg-art active state is set by player.playYouTube()
+    extractDominantColor(thumbURL);
+  } else {
+    bgArt.classList.remove('active');
+    thumb.style.display = 'none';
+    stopBackgroundVideoProxy();
+    resetThemeColors();
+  }
+  // Reset proxy video when switching songs
+  stopBackgroundVideoProxy();
+  const iframe = document.querySelector('#bg-art iframe');
+  if (iframe) iframe.style.display = '';
+}
+
+// Extract dominant color from thumbnail and set as accent
+function extractDominantColor(url) {
+  if (!settings.autoColor) return;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 64; canvas.height = 36; // small sample
+    ctx.drawImage(img, 0, 0, 64, 36);
+    const data = ctx.getImageData(0, 0, 64, 36).data;
+    // Find the most vibrant color by sampling
+    let bestR = 51, bestG = 255, bestB = 51; // fallback green
+    let bestSat = 0;
+    for (let i = 0; i < data.length; i += 16) { // sample every 4th pixel
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const sat = max === min ? 0 : (max - min) / (l > 127 ? (510 - max - min) : (max + min));
+      // Prefer vibrant, not too dark, not too light
+      if (sat > bestSat && l > 40 && l < 220) {
+        bestSat = sat; bestR = r; bestG = g; bestB = b;
+      }
+    }
+    // Make sure the color is bright enough for text
+    const lum = (bestR * 0.299 + bestG * 0.587 + bestB * 0.114);
+    const boost = lum < 120 ? 120 / Math.max(lum, 1) : 1;
+    bestR = Math.min(255, Math.round(bestR * boost));
+    bestG = Math.min(255, Math.round(bestG * boost));
+    bestB = Math.min(255, Math.round(bestB * boost));
+
+    const hex = '#' + [bestR,bestG,bestB].map(v => v.toString(16).padStart(2,'0')).join('');
+    _autoColorActive = true;
+    applyColor(hex);
+  };
+  img.onerror = () => resetThemeColors();
+  img.src = url;
+}
+
+function resetThemeColors() {
+  _autoColorActive = false;
+  applyColor(settings.color);
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// Fullscreen Lyrics
+// ═══════════════════════════════════════════════════════════
+function openLyricsFullscreen() {
+  if (!currentTrack) { print('Nothing playing.', 'dim'); return; }
+  lyricsFullscreen = true;
+  lyricsFS.classList.add('active');
+  const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+  fsTrackName.textContent = song ? (song.name + (song.artist ? ' - ' + song.artist : '')) : '';
+  renderFullscreenLyrics();
+  btnFS.style.color = 'var(--cyan)';
+  btnFS.style.borderColor = 'var(--cyan)';
+}
+
+function closeLyricsFullscreen() {
+  lyricsFullscreen = false;
+  lyricsFS.classList.remove('active');
+  btnFS.style.color = '';
+  btnFS.style.borderColor = '';
+  cmdInput.focus();
+}
+
+function renderFullscreenLyrics() {
+  fsScroll.innerHTML = '';
+  fsScroll.style.transform = '';
+  if (!currentLyrics) {
+    fsScroll.innerHTML = '<div class="fs-no-lyrics">No lyrics available</div>';
+    return;
+  }
+  const isPlain = !currentLyrics.synced;
+  const lines = currentLyrics.synced || (currentLyrics.plain ? currentLyrics.plain.split('\n').map(t => ({ text: t })) : []);
+  lines.forEach((line, i) => {
+    const div = document.createElement('div');
+    div.className = 'fs-line' + (isPlain ? ' plain-line' : '');
+    div.textContent = line.text || '...';
+    div.style.animationDelay = (i * 0.02) + 's';
+    if (!isPlain && line.time != null) {
+      div.dataset.time = line.time;
+      div.addEventListener('click', () => player.seek(line.time));
+      div.style.cursor = 'pointer';
+    }
+    fsScroll.appendChild(div);
+  });
+  // For plain lyrics, enable scrolling since there's no auto-scroll
+  if (isPlain) {
+    fsScroll.parentElement.style.overflow = 'auto';
+    fsScroll.parentElement.style.maskImage = 'none';
+    fsScroll.parentElement.style.webkitMaskImage = 'none';
+  } else {
+    fsScroll.parentElement.style.overflow = 'hidden';
+    fsScroll.parentElement.style.maskImage = '';
+    fsScroll.parentElement.style.webkitMaskImage = '';
+  }
+}
+
+function updateFullscreenHighlight(time) {
+  if (!lyricsFullscreen || !currentLyrics || !currentLyrics.synced) return;
+  const adjusted = time - lyricsOffset;
+  const lines = fsScroll.querySelectorAll('.fs-line');
+  let activeIdx = -1;
+  for (let i = currentLyrics.synced.length - 1; i >= 0; i--) {
+    if (adjusted >= currentLyrics.synced[i].time) { activeIdx = i; break; }
+  }
+  lines.forEach((el, i) => {
+    el.classList.toggle('active', i === activeIdx);
+    el.classList.toggle('past', i < activeIdx);
+  });
+  // Scroll active line to center using transform
+  if (activeIdx >= 0 && lines[activeIdx]) {
+    const container = fsScroll.parentElement;
+    const lineTop = lines[activeIdx].offsetTop;
+    const lineH = lines[activeIdx].offsetHeight;
+    const containerH = container.offsetHeight;
+    const offset = -(lineTop - containerH / 2 + lineH / 2);
+    fsScroll.style.transform = 'translateY(' + offset + 'px)';
+  }
+}
+
+// Wire up fullscreen buttons
+fsCloseBtn.addEventListener('click', closeLyricsFullscreen);
+btnFS.addEventListener('click', () => {
+  if (lyricsFullscreen) closeLyricsFullscreen();
+  else openLyricsFullscreen();
+});
+
+// ESC key handlers
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && lyricsFullscreen) closeLyricsFullscreen();
+  if (e.key === 'Escape' && syncMode) closeSyncMode();
+});
+
+// ═══════════════════════════════════════════════════════════
+// Sync Mode — visual waveform + press Enter to align
+// ═══════════════════════════════════════════════════════════
+let syncMode = false;
+let syncAnimFrame = null;
+let syncWaveformData = [];
+const syncOverlay = document.getElementById('sync-overlay');
+const syncCanvas = document.getElementById('sync-canvas');
+const syncCtx = syncCanvas.getContext('2d');
+const syncTimeEl = document.getElementById('sync-time');
+const syncTrackEl = document.getElementById('sync-track-name');
+const syncMarkersEl = document.getElementById('sync-markers');
+
+function generateWaveform(length) {
+  // Generate smooth random waveform bars
+  const bars = [];
+  let val = 0.3;
+  for (let i = 0; i < length; i++) {
+    val += (Math.random() - 0.5) * 0.15;
+    val = Math.max(0.08, Math.min(1, val));
+    // Add some musical rhythm - occasional peaks
+    if (Math.random() < 0.08) val = Math.min(1, val + 0.3);
+    bars.push(val);
+  }
+  // Smooth it
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < bars.length - 1; i++) {
+      bars[i] = bars[i] * 0.5 + (bars[i-1] + bars[i+1]) * 0.25;
+    }
+  }
+  return bars;
+}
+
+function drawSyncWaveform() {
+  const w = syncCanvas.width = syncCanvas.offsetWidth * 2;
+  const h = syncCanvas.height = syncCanvas.offsetHeight * 2;
+  syncCtx.clearRect(0, 0, w, h);
+
+  if (syncWaveformData.length === 0) return;
+
+  const dur = player.getDuration() || 1;
+  const time = player.getCurrentTime();
+  const progress = time / dur;
+  const barW = Math.max(2, w / syncWaveformData.length);
+  const gap = 1;
+
+  // Get current accent color
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue('--green').trim() || '#33ff33';
+  const dim = style.getPropertyValue('--dark-green').trim() || '#0a3d0a';
+
+  for (let i = 0; i < syncWaveformData.length; i++) {
+    const x = i * barW;
+    const barH = syncWaveformData[i] * h * 0.85;
+    const y = (h - barH) / 2;
+    const played = (i / syncWaveformData.length) <= progress;
+    syncCtx.fillStyle = played ? accent : dim;
+    syncCtx.fillRect(x + gap / 2, y, barW - gap, barH);
+  }
+
+  // Playhead
+  const px = progress * w;
+  syncCtx.fillStyle = 'rgba(255,255,255,0.8)';
+  syncCtx.fillRect(px - 1, 0, 2, h);
+
+  // Time display
+  syncTimeEl.textContent = formatTime(time);
+
+  if (syncMode) syncAnimFrame = requestAnimationFrame(drawSyncWaveform);
+}
+
+let _syncReadyForInput = false;
+
+function openSyncMode() {
+  if (!currentTrack) { print('Nothing playing.', 'dim'); return; }
+  const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+  if (!song) return;
+
+  syncMode = true;
+  _syncReadyForInput = false;
+  // Delay accepting input so the Enter from the command doesn't immediately trigger
+  setTimeout(() => { _syncReadyForInput = true; }, 300);
+  syncOverlay.classList.add('active');
+  syncTrackEl.textContent = song.name + (song.artist ? ' - ' + song.artist : '');
+
+  // Generate waveform bars
+  syncWaveformData = generateWaveform(200);
+
+  // Set up time markers
+  const dur = player.getDuration() || 0;
+  if (dur > 0) {
+    const markers = [];
+    const step = dur > 120 ? 30 : (dur > 60 ? 15 : 10);
+    for (let t = 0; t <= dur; t += step) markers.push(formatTime(t));
+    syncMarkersEl.innerHTML = markers.map(m => '<span>' + m + '</span>').join('');
+  }
+
+  // Restart from beginning
+  player.seek(0);
+  player.play();
+
+  // Start drawing
+  drawSyncWaveform();
+}
+
+function closeSyncMode(setSync) {
+  syncMode = false;
+  syncOverlay.classList.remove('active');
+  if (syncAnimFrame) { cancelAnimationFrame(syncAnimFrame); syncAnimFrame = null; }
+  cmdInput.focus();
+}
+
+// Sync overlay keyboard handler
+document.addEventListener('keydown', e => {
+  if (!syncMode || !_syncReadyForInput) return;
+  if (e.key === 'Enter') {
+    // Set sync: first lyric should appear at current playback time
+    if (currentLyrics && currentLyrics.synced && currentLyrics.synced.length > 0) {
+      const firstLyricTime = currentLyrics.synced[0].time;
+      const now = player.getCurrentTime() - 0.5;
+      lyricsOffset = now - firstLyricTime;
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song) { song.lyricsOffset = lyricsOffset; saveFS(); }
+      closeSyncMode();
+      print('Synced! First lyric aligned to ' + formatTime(now) + ' (saved)', 'info');
+    } else {
+      closeSyncMode();
+      print('No synced lyrics to align.', 'warn');
+    }
+  } else if (e.key === 'e' || e.key === 'E') {
+    // Set end point
+    const now = player.getCurrentTime();
+    const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+    if (song) {
+      song.endTime = now;
+      saveFS();
+      closeSyncMode();
+      print('End point set at ' + formatTime(now) + '. Song will skip after this.', 'info');
+    }
+  }
+});
+
+// Click on waveform to seek
+syncCanvas.addEventListener('click', e => {
+  if (!syncMode) return;
+  const rect = syncCanvas.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  const dur = player.getDuration();
+  if (dur) player.seek(pct * dur);
+});
+
+// ═══════════════════════════════════════════════════════════
+// Output
+// ═══════════════════════════════════════════════════════════
+function print(text, cls = '') {
+  text.split('\n').forEach(l => {
+    const div = document.createElement('div');
+    div.className = 'line' + (cls ? ' ' + cls : '');
+    div.textContent = l;
+    output.appendChild(div);
+  });
+  scrollToBottom();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Playback
+// ═══════════════════════════════════════════════════════════
+async function loadAndPlay(playlist, index) {
+  const pl = fs[playlist];
+  if (!pl || !pl.songs[index]) return;
+  const song = pl.songs[index];
+  currentTrack = { playlist, index };
+
+  // Fade in track name
+  trackNameEl.style.opacity = '0';
+  trackNameEl.textContent = song.name + (song.artist ? ' - ' + song.artist : '');
+  requestAnimationFrame(() => trackNameEl.style.opacity = '1');
+
+  // Set background art
+  updateBackgroundArt(song);
+
+  // Play based on source type
+  if (song.source === 'youtube') {
+    const preloaded = getPreloaded(playlist, index);
+    await player.playYouTube(song.videoId, preloaded);
+    // Preload next song in background
+    setTimeout(preloadNext, 2000);
+  } else {
+    const blob = await getAudioBlob(song.id);
+    if (!blob) { print('Error: audio data not found for "' + song.name + '"', 'error'); return; }
+    player.playBlob(blob);
+  }
+
+  print('Now playing: ' + song.name + (song.artist ? ' - ' + song.artist : ''), 'info');
+
+  // Restore per-song lyrics offset
+  lyricsOffset = song.lyricsOffset || 0;
+
+  // Fetch lyrics
+  loadLyricsForSong(song);
+}
+
+async function loadLyricsForSong(song) {
+  // Check if lyrics are cached on the song
+  if (song.syncedLyrics || song.plainLyrics) {
+    setCurrentLyrics(song.syncedLyrics, song.plainLyrics);
+    return;
+  }
+
+  clearLyrics();
+  lyricsBody.innerHTML = '<div class="lyrics-status">Searching for lyrics...</div>';
+
+  // Clean up the title for better search results
+  const searchArtist = cleanSongTitle(song.artist || '');
+
+  // Try the full cleaned name first, then split on / and try each part
+  const rawName = cleanSongTitle(song.name);
+  const namesToTry = [rawName];
+  if (rawName.includes('/')) rawName.split('/').forEach(p => { if (p.trim()) namesToTry.push(p.trim()); });
+  if (rawName.includes(' - ')) rawName.split(' - ').forEach(p => { if (p.trim()) namesToTry.push(p.trim()); });
+
+  let data = null;
+  for (const searchName of namesToTry) {
+    data = await fetchLyrics(searchName, searchArtist);
+    if (data) break;
+  }
+  if (data) {
+    // Cache on the song object
+    song.syncedLyrics = data.syncedLyrics || null;
+    song.plainLyrics = data.plainLyrics || null;
+    saveFS();
+    setCurrentLyrics(song.syncedLyrics, song.plainLyrics);
+  } else {
+    lyricsBody.innerHTML = '<div class="lyrics-status">No lyrics found. Use "lyrics edit" to add manually.</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Preloading — fetch next song's stream URL while current plays
+// ═══════════════════════════════════════════════════════════
+let _preloadCache = {}; // { "playlist:index": { audioURL, videoId } }
+let _preloadAudio = new Audio(); // second audio element for preloading
+
+function getNextIndex() {
+  if (!currentTrack) return null;
+  const pl = fs[currentTrack.playlist];
+  if (!pl || pl.songs.length === 0) return null;
+  if (shuffleOn) return Math.floor(Math.random() * pl.songs.length);
+  const next = currentTrack.index + 1;
+  if (next >= pl.songs.length) return repeatMode >= 1 ? 0 : null;
+  return next;
+}
+
+async function preloadNext() {
+  const nextIdx = getNextIndex();
+  if (nextIdx === null || !currentTrack) return;
+  const key = currentTrack.playlist + ':' + nextIdx;
+  if (_preloadCache[key]) return; // already preloaded
+
+  const pl = fs[currentTrack.playlist];
+  const song = pl?.songs[nextIdx];
+  if (!song || song.source !== 'youtube') return;
+
+  try {
+    const resp = await fetch('http://127.0.0.1:18899/stream/' + song.videoId);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.url) {
+        _preloadCache[key] = { audioURL: data.url, videoId: song.videoId };
+        // Preload into the spare audio element
+        _preloadAudio.src = data.url;
+        _preloadAudio.load();
+      }
+    }
+  } catch(e) {}
+}
+
+function getPreloaded(playlist, index) {
+  const key = playlist + ':' + index;
+  const cached = _preloadCache[key];
+  delete _preloadCache[key]; // use once
+  return cached;
+}
+
+function playNext() {
+  if (!currentTrack) return;
+  const pl = fs[currentTrack.playlist];
+  if (!pl || pl.songs.length === 0) return;
+  let nextIdx;
+  if (shuffleOn) {
+    nextIdx = Math.floor(Math.random() * pl.songs.length);
+  } else {
+    nextIdx = currentTrack.index + 1;
+    if (nextIdx >= pl.songs.length) {
+      if (repeatMode >= 1) nextIdx = 0;
+      else { player.pause(); return; }
+    }
+  }
+  loadAndPlay(currentTrack.playlist, nextIdx);
+}
+
+function playPrev() {
+  if (!currentTrack) return;
+  if (player.getCurrentTime() > 3) { player.seek(0); return; }
+  const pl = fs[currentTrack.playlist];
+  if (!pl) return;
+  let prevIdx = currentTrack.index - 1;
+  if (prevIdx < 0) prevIdx = pl.songs.length - 1;
+  loadAndPlay(currentTrack.playlist, prevIdx);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Player bar events
+// ═══════════════════════════════════════════════════════════
+progressBar.addEventListener('click', e => {
+  const dur = player.getDuration();
+  if (!dur) return;
+  const rect = progressBar.getBoundingClientRect();
+  player.seek(((e.clientX - rect.left) / rect.width) * dur);
+});
+
+volumeSlider.addEventListener('input', () => player.setVolume(volumeSlider.value / 100));
+
+btnPlay.addEventListener('click', () => {
+  if (!currentTrack) return;
+  if (player.isPlaying()) player.pause(); else player.play();
+});
+btnPrev.addEventListener('click', () => playPrev());
+btnNext.addEventListener('click', () => playNext());
+
+btnShuffle.addEventListener('click', () => {
+  shuffleOn = !shuffleOn;
+  btnShuffle.style.color = shuffleOn ? 'var(--cyan)' : '';
+  btnShuffle.style.borderColor = shuffleOn ? 'var(--cyan)' : '';
+});
+
+btnRepeat.addEventListener('click', () => {
+  repeatMode = (repeatMode + 1) % 3;
+  const icons = [
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>',
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>',
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/><text x="13" y="16" font-size="7" font-weight="bold" text-anchor="middle">1</text></svg>',
+  ];
+  const colors = ['', 'var(--cyan)', 'var(--amber)'];
+  btnRepeat.innerHTML = icons[repeatMode];
+  btnRepeat.style.color = colors[repeatMode];
+  btnRepeat.style.borderColor = colors[repeatMode];
+});
+
+btnLyrics.addEventListener('click', toggleLyrics);
+lyricsCloseBtn.addEventListener('click', toggleLyrics);
+
+// Hide terminal toggle
+const btnHide = document.getElementById('btn-hide');
+let terminalHidden = false;
+btnHide.addEventListener('click', () => {
+  terminalHidden = !terminalHidden;
+  terminal.style.opacity = terminalHidden ? '0' : '1';
+  terminal.style.pointerEvents = terminalHidden ? 'none' : '';
+  btnHide.style.color = terminalHidden ? 'var(--cyan)' : '';
+  document.getElementById('player-bar').style.background = terminalHidden ? 'rgba(5, 20, 5, 0.4)' : '';
+  if (!terminalHidden) cmdInput.focus();
+});
+
+// Cinema mode toggle - full unfiltered video
+const btnCinema = document.getElementById('btn-cinema');
+let cinemaMode = false;
+btnCinema.addEventListener('click', () => {
+  cinemaMode = !cinemaMode;
+  document.getElementById('crt').classList.toggle('cinema', cinemaMode);
+  bgArt.classList.toggle('cinema', cinemaMode);
+  btnCinema.style.color = cinemaMode ? 'var(--cyan)' : '';
+  // Make player bar semi-transparent in cinema mode
+  document.getElementById('player-bar').style.background = cinemaMode ? 'rgba(0,0,0,0.5)' : '';
+  document.getElementById('player-bar').style.borderColor = cinemaMode ? 'rgba(255,255,255,0.1)' : '';
+});
+
+// ESC exits cinema mode
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && cinemaMode) {
+    cinemaMode = false;
+    document.getElementById('crt').classList.remove('cinema');
+    bgArt.classList.remove('cinema');
+    btnCinema.style.color = '';
+    document.getElementById('player-bar').style.background = '';
+    document.getElementById('player-bar').style.borderColor = '';
+    cmdInput.focus();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// File Import
+// ═══════════════════════════════════════════════════════════
+async function importFiles(files) {
+  if (cwd === '~') { print('cd into a playlist first before importing songs.', 'warn'); return; }
+  const pl = fs[cwd];
+  if (!pl) return;
+  let count = 0;
+  for (const file of files) {
+    if (!file.type.startsWith('audio/')) { print('Skipping non-audio file: ' + file.name, 'warn'); continue; }
+    const id = genId();
+    await storeAudioBlob(id, file);
+    pl.songs.push({ id, name: fileBaseName(file.name), artist: '', filename: file.name, source: 'local' });
+    count++;
+  }
+  saveFS();
+  if (count > 0) print('Imported ' + count + ' track' + (count > 1 ? 's' : '') + '.', 'info');
+}
+
+// Drag and drop
+let dragCounter = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; dropOverlay.classList.add('active'); });
+document.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('active'); } });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+  e.preventDefault(); dragCounter = 0; dropOverlay.classList.remove('active');
+  if (e.dataTransfer.files.length > 0) await importFiles(e.dataTransfer.files);
+  cmdInput.focus();
+});
+
+fileInput.addEventListener('change', async () => {
+  if (fileInput.files.length > 0) await importFiles(fileInput.files);
+  fileInput.value = ''; cmdInput.focus();
+});
+
+// ═══════════════════════════════════════════════════════════
+// YouTube URL import
+// ═══════════════════════════════════════════════════════════
+async function fetchVideoTitle(videoId) {
+  try {
+    const url = 'https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + videoId;
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.title) return data.title;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function addYouTubeTrack(input) {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = fs[cwd];
+  if (!pl) return;
+
+  const videoId = parseYouTubeURL(input);
+  if (!videoId) { print('Invalid YouTube URL.', 'error'); return; }
+
+  print('Fetching video info...', 'dim');
+  const title = await fetchVideoTitle(videoId);
+  const name = title || ('YouTube ' + videoId);
+
+  // Try to split "Artist - Title" format, then clean up YouTube junk
+  let songName = name;
+  let artist = '';
+  const dash = name.match(/^(.+?)\s*[-\u2013\u2014]\s*(.+)$/);
+  if (dash) { artist = dash[1].trim(); songName = dash[2].trim(); }
+  songName = cleanSongTitle(songName);
+  artist = cleanSongTitle(artist);
+
+  pl.songs.push({
+    id: genId(), name: songName, artist, source: 'youtube', videoId,
+  });
+  saveFS();
+
+  print('Added: ' + songName + (artist ? ' - ' + artist : '') + ' [YouTube]', 'info');
+}
+
+// Hardcoded fallback instances
+let PIPED_INSTANCES = [
+  'https://api.piped.private.coffee',
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://pipedapi.in.projectsegfau.lt',
+];
+
+let INVIDIOUS_INSTANCES = [
+  'https://inv.thepixora.com',
+  'https://invidious.private.coffee',
+  'https://inv.nadeko.net',
+  'https://invidious.fdn.fr',
+];
+
+// Fetch live instance lists on boot (replaces hardcoded if successful)
+async function refreshInstances() {
+  try {
+    const resp = await fetch('https://piped-instances.kavin.rocks/', { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const apis = data.map(d => d.api_url).filter(Boolean);
+      if (apis.length > 0) PIPED_INSTANCES = apis;
+    }
+  } catch (e) {}
+  try {
+    const resp = await fetch('https://api.invidious.io/instances.json?sort_by=health', { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const uris = data.filter(([, i]) => i.type === 'https' && i.api).map(([, i]) => i.uri);
+      if (uris.length > 0) INVIDIOUS_INSTANCES = uris;
+    }
+  } catch (e) {}
+}
+
+async function fetchFromPiped(path) {
+  for (const base of PIPED_INSTANCES) {
+    try {
+      const resp = await fetch(base + path);
+      if (resp.ok) return await resp.json();
+    } catch (e) { /* try next instance */ }
+  }
+  return null;
+}
+
+let _lastFailedInstance = null;
+
+async function fetchYouTubeStreams(videoId) {
+  // Returns { audioURL, videoURL } or null
+
+  // 1) Try Piped instances (skip last failed one first)
+  const pipedOrder = PIPED_INSTANCES.filter(b => b !== _lastFailedInstance)
+    .concat(PIPED_INSTANCES.filter(b => b === _lastFailedInstance));
+  for (const base of pipedOrder) {
+    try {
+      const resp = await fetch(base + '/streams/' + videoId);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+
+      let audioURL = null;
+      if (data.audioStreams && data.audioStreams.length > 0) {
+        const sorted = data.audioStreams
+          .filter(s => s.mimeType && s.mimeType.startsWith('audio/'))
+          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        if (sorted.length > 0) audioURL = sorted[0].url;
+      }
+
+      let videoURL = null;
+      if (data.videoStreams && data.videoStreams.length > 0) {
+        // Pick a ~480p video stream for background (saves bandwidth)
+        const vids = data.videoStreams
+          .filter(s => s.mimeType && s.mimeType.startsWith('video/'));
+        // Prefer video-only streams, ~480p quality
+        const preferred = vids.filter(s => s.videoOnly).sort((a, b) => {
+          const aq = parseInt(a.quality) || 0, bq = parseInt(b.quality) || 0;
+          return Math.abs(aq - 480) - Math.abs(bq - 480);
+        });
+        // Fall back to combined streams
+        const fallback = vids.filter(s => !s.videoOnly).sort((a, b) => {
+          const aq = parseInt(a.quality) || 0, bq = parseInt(b.quality) || 0;
+          return Math.abs(aq - 480) - Math.abs(bq - 480);
+        });
+        const pick = preferred[0] || fallback[0];
+        if (pick) videoURL = pick.url;
+      }
+
+      if (audioURL) {
+        _lastFailedInstance = null;
+        print('Stream found via Piped.', 'dim');
+        return { audioURL, videoURL };
+      }
+      _lastFailedInstance = base;
+    } catch (e) { /* try next */ }
+  }
+
+  // 2) Fall back to Invidious (with local proxy, skip last failed)
+  print('Trying Invidious...', 'dim');
+  const invOrder = INVIDIOUS_INSTANCES.filter(b => b !== _lastFailedInstance)
+    .concat(INVIDIOUS_INSTANCES.filter(b => b === _lastFailedInstance));
+  for (const base of invOrder) {
+    try {
+      const resp = await fetch(base + '/api/v1/videos/' + videoId + '?local=true');
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      if (data.adaptiveFormats) {
+        const audioFormats = data.adaptiveFormats
+          .filter(f => f.type && f.type.startsWith('audio/'))
+          .sort((a, b) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
+        const videoFormats = data.adaptiveFormats
+          .filter(f => f.type && f.type.startsWith('video/'))
+          .sort((a, b) => {
+            const aq = parseInt(a.qualityLabel) || 0, bq = parseInt(b.qualityLabel) || 0;
+            return Math.abs(aq - 480) - Math.abs(bq - 480);
+          });
+        if (audioFormats.length > 0) {
+          _lastFailedInstance = null;
+          print('Stream found via Invidious.', 'dim');
+          return { audioURL: audioFormats[0].url, videoURL: videoFormats[0]?.url || null };
+        }
+        _lastFailedInstance = base;
+      }
+    } catch (e) { /* try next */ }
+  }
+
+  return null;
+}
+
+// Strip YouTube title junk for cleaner lyrics/metadata
+function cleanSongTitle(name) {
+  return name
+    .replace(/\(Official\s*(Audio|Video|Music\s*Video|Visualizer|Lyric\s*Video|HD)\)/gi, '')
+    .replace(/\[Official\s*(Audio|Video|Music\s*Video|Visualizer|Lyric\s*Video|HD)\]/gi, '')
+    .replace(/\(feat\.?\s*[^)]*\)/gi, '')
+    .replace(/\[feat\.?\s*[^\]]*\]/gi, '')
+    .replace(/\(ft\.?\s*[^)]*\)/gi, '')
+    .replace(/\[ft\.?\s*[^\]]*\]/gi, '')
+    .replace(/\(prod\.?\s*[^)]*\)/gi, '')
+    .replace(/\[prod\.?\s*[^\]]*\]/gi, '')
+    .replace(/\(Lyrics?\s*(Video)?\)/gi, '')
+    .replace(/\[Lyrics?\s*(Video)?\]/gi, '')
+    .replace(/\(Audio\)/gi, '')
+    .replace(/\[Audio\]/gi, '')
+    .replace(/\(MV\)/gi, '')
+    .replace(/\(Explicit\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function addYouTubePlaylist(playlistId) {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = fs[cwd];
+  if (!pl) return;
+
+  print('Fetching playlist from YouTube...', 'dim');
+
+  let data = await fetchFromPiped('/playlists/' + playlistId);
+  if (!data || !data.relatedStreams) {
+    print('Could not fetch playlist. The Piped API might be down.', 'error');
+    print('Try again later or add individual tracks with: yt <video-url>', 'dim');
+    return;
+  }
+
+  const playlistName = data.name || 'Unknown Playlist';
+  print('Playlist: ' + playlistName + ' (' + (data.videos || data.relatedStreams.length) + ' tracks)', 'info');
+
+  let added = 0;
+  let allStreams = [...data.relatedStreams];
+
+  // Fetch additional pages if the playlist is paginated
+  let nextpage = data.nextpage;
+  while (nextpage) {
+    const pageData = await fetchFromPiped('/nextpage/playlists/' + playlistId + '?nextpage=' + encodeURIComponent(nextpage));
+    if (pageData && pageData.relatedStreams) {
+      allStreams = allStreams.concat(pageData.relatedStreams);
+      nextpage = pageData.nextpage;
+    } else {
+      break;
+    }
+  }
+
+  for (const stream of allStreams) {
+    const videoId = stream.url ? stream.url.replace('/watch?v=', '') : null;
+    if (!videoId) continue;
+
+    const title = stream.title || ('YouTube ' + videoId);
+    let songName = title;
+    let artist = stream.uploaderName || '';
+
+    // Try to split "Artist - Title" format from the video title
+    const dash = title.match(/^(.+?)\s*[-\u2013\u2014]\s*(.+)$/);
+    if (dash) { artist = dash[1].trim(); songName = dash[2].trim(); }
+    songName = cleanSongTitle(songName);
+    artist = cleanSongTitle(artist);
+
+    pl.songs.push({
+      id: genId(), name: songName, artist, source: 'youtube', videoId,
+    });
+    added++;
+  }
+
+  saveFS();
+  print('Imported ' + added + ' track' + (added !== 1 ? 's' : '') + ' from "' + playlistName + '".', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Lyrics Editor
+// ═══════════════════════════════════════════════════════════
+let editingSongRef = null;
+
+function openLyricsEditor(song) {
+  editingSongRef = song;
+  editorTitle.textContent = 'Edit Lyrics: ' + song.name;
+  lyricsTextarea.value = song.syncedLyrics || song.plainLyrics || '';
+  lyricsEditorOverlay.classList.add('active');
+  lyricsTextarea.focus();
+}
+
+function closeLyricsEditor() {
+  lyricsEditorOverlay.classList.remove('active');
+  editingSongRef = null;
+  cmdInput.focus();
+}
+
+function saveLyricsEditor() {
+  if (!editingSongRef) return;
+  const text = lyricsTextarea.value.trim();
+  // Detect if it's LRC format
+  if (text.match(/^\[\d{2}:\d{2}\.\d{2,3}\]/m)) {
+    editingSongRef.syncedLyrics = text;
+    editingSongRef.plainLyrics = text.replace(/\[\d{2}:\d{2}\.\d{2,3}\]\s*/g, '');
+  } else {
+    editingSongRef.syncedLyrics = null;
+    editingSongRef.plainLyrics = text || null;
+  }
+  saveFS();
+  // Refresh display if this is the current track
+  if (currentTrack) {
+    const cur = fs[currentTrack.playlist]?.songs[currentTrack.index];
+    if (cur === editingSongRef) {
+      setCurrentLyrics(editingSongRef.syncedLyrics, editingSongRef.plainLyrics);
+    }
+  }
+  print('Lyrics saved.', 'info');
+  closeLyricsEditor();
+}
+
+document.getElementById('editor-save').addEventListener('click', saveLyricsEditor);
+document.getElementById('editor-cancel').addEventListener('click', closeLyricsEditor);
+lyricsTextarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); saveLyricsEditor(); }
+  if (e.key === 'Escape') closeLyricsEditor();
+});
+
+// ═══════════════════════════════════════════════════════════
+// Commands
+// ═══════════════════════════════════════════════════════════
+const commands = {};
+
+commands.help = () => {
+  print('');
+  print('  BashBeats Commands', 'bold');
+  print('  ──────────────────────────────────────────', 'dim');
+  print('  mkdir <name>          Create a playlist');
+  print('  rmdir <name>          Delete a playlist');
+  print('  ls                    List playlists or songs');
+  print('  cd <name>             Enter a playlist (cd .. to go back)');
+  print('  touch                 Import local audio files');
+  print('  yt <url>              Add a YT track or import a playlist');
+  print('  spotify <url>         Import a Spotify playlist');
+  print('  rm <name|#>           Remove a song');
+  print('  mv <#> <playlist>     Move a song to another playlist');
+  print('  cp <#> <playlist>     Copy a song to another playlist');
+  print('  cat <#>               Show song details');
+  print('  play [#|name]         Play a song (or resume)');
+  print('  pause                 Pause playback');
+  print('  stop                  Stop playback');
+  print('  next / prev           Skip tracks');
+  print('  shuffle               Toggle shuffle');
+  print('  repeat                Cycle repeat mode');
+  print('  volume <0-100>        Set volume');
+  print('  sync                  Visual lyrics sync tool');
+  print('  end                   Set song end point (skip outros)');
+  print('  grep <query>          Search all songs');
+  print('  pwd                   Show current location');
+  print('  rename <#> <name>     Rename a song');
+  print('  artist <#> <name>     Set song artist');
+  print('  queue                 Show play queue');
+  print('  lyrics                Toggle lyrics panel');
+  print('  lyrics fs             Fullscreen lyrics mode');
+  print('  lyrics edit [#]       Edit lyrics for a song');
+  print('  lyrics fetch [#]      Re-fetch lyrics from web');
+  print('  clear                 Clear terminal');
+  print('  settings              Customize colors, video, overlay');
+  print('  neofetch              System info');
+  print('  help                  Show this help');
+  print('');
+  print('  Tip: drag & drop audio files, or paste YouTube URLs!', 'dim');
+  print('');
+};
+
+commands.mkdir = (args) => {
+  const name = sanitizeName(args.join(' '));
+  if (!name) { print('Usage: mkdir <playlist_name>', 'error'); return; }
+  if (fs[name]) { print('mkdir: already exists', 'error'); return; }
+  fs[name] = { songs: [], created: Date.now() };
+  saveFS();
+  print('Created playlist: ' + name);
+};
+
+commands.rmdir = async (args) => {
+  const name = sanitizeName(args.join(' '));
+  if (!name) { print('Usage: rmdir <playlist_name>', 'error'); return; }
+  if (!fs[name]) { print('rmdir: not found', 'error'); return; }
+  for (const s of fs[name].songs) { if (s.source !== 'youtube') await deleteAudioBlob(s.id); }
+  if (currentTrack && currentTrack.playlist === name) { player.stop(); currentTrack = null; trackNameEl.textContent = 'No track loaded'; }
+  if (cwd === name) cwd = '~';
+  delete fs[name];
+  saveFS(); updatePrompt();
+  print('Removed playlist: ' + name);
+};
+
+commands.ls = () => {
+  if (cwd === '~') {
+    const names = Object.keys(fs);
+    if (names.length === 0) { print('No playlists yet. Use mkdir <name> to create one.', 'dim'); return; }
+    print('Playlists:', 'bold');
+    names.forEach(name => {
+      const c = fs[name].songs.length;
+      print('  \ud83d\udcc1 ' + name + '  (' + c + ' track' + (c !== 1 ? 's' : '') + ')');
+    });
+  } else {
+    const pl = getCurrentPlaylist();
+    if (!pl) return;
+    if (pl.songs.length === 0) { print('Empty playlist. Use touch or yt <url> to add songs.', 'dim'); return; }
+    print('Songs in "' + cwd + '":', 'bold');
+    pl.songs.forEach((song, i) => {
+      const num = String(i + 1).padStart(2, ' ');
+      const playing = currentTrack && currentTrack.playlist === cwd && currentTrack.index === i;
+      const prefix = playing ? (player.isPlaying() ? ' \u25b6 ' : ' \u23f8 ') : '   ';
+      const artist = song.artist ? ' - ' + song.artist : '';
+      const src = song.source === 'youtube' ? ' [YT]' : '';
+      print('  ' + num + '.' + prefix + song.name + artist + src, playing ? 'info' : '');
+    });
+  }
+};
+
+commands.cd = (args) => {
+  const target = args.join(' ').trim();
+  if (!target || target === '~' || target === '/' || target === '..' || target === '../') { cwd = '~'; updatePrompt(); return; }
+  const match = Object.keys(fs).find(k => k === target || k.toLowerCase() === target.toLowerCase());
+  if (match) { cwd = match; updatePrompt(); }
+  else print('cd: playlist "' + target + '" not found', 'error');
+};
+
+commands.touch = () => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  fileInput.click();
+};
+
+commands.yt = async (args) => {
+  const input = args.join(' ').trim();
+  if (!input) { print('Usage: yt <youtube-url or playlist-url>', 'error'); return; }
+
+  // Check if it's a Spotify URL
+  const spotifyMatch = input.match(/open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/);
+  if (spotifyMatch) { await importSpotifyPlaylist(spotifyMatch[1]); return; }
+
+  // Check if it's a YouTube playlist URL
+  const playlistId = parseYouTubePlaylistId(input);
+  if (playlistId) {
+    await addYouTubePlaylist(playlistId);
+  } else {
+    await addYouTubeTrack(input);
+  }
+};
+
+commands.spotify = async (args) => {
+  const input = args.join(' ').trim();
+  if (!input) { print('Usage: spotify <playlist-url>', 'error'); return; }
+  const match = input.match(/open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/) || input.match(/^([a-zA-Z0-9]{22})$/);
+  if (!match) { print('Paste a Spotify playlist URL.', 'error'); return; }
+  await importSpotifyPlaylist(match[1]);
+};
+
+async function importSpotifyPlaylist(playlistId) {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = fs[cwd];
+  if (!pl) return;
+
+  print('Fetching Spotify playlist...', 'dim');
+
+  // 1) Get track list from Spotify via proxy
+  let tracks;
+  try {
+    const resp = await fetch('http://127.0.0.1:18899/spotify/' + playlistId);
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    if (data.error) { print('Error: ' + data.error, 'error'); return; }
+    tracks = data.tracks;
+    print('Found: ' + data.name + ' (' + tracks.length + ' tracks)', 'info');
+  } catch(e) {
+    print('Could not fetch Spotify playlist. Make sure the app proxy is running.', 'error');
+    return;
+  }
+
+  // 2) For each track, search YouTube and add the first result
+  let added = 0;
+  for (const track of tracks) {
+    const query = track.artist + ' ' + track.title;
+    print('  Searching: ' + track.title + ' - ' + track.artist + '...', 'dim');
+    try {
+      // Search YouTube via Piped
+      const searchData = await fetchFromPiped('/search?q=' + encodeURIComponent(query) + '&filter=music_songs');
+      const items = searchData?.items || searchData?.relatedStreams || [];
+      // Fall back to video search if music_songs returns nothing
+      let results = items;
+      if (results.length === 0) {
+        const fallback = await fetchFromPiped('/search?q=' + encodeURIComponent(query) + '&filter=videos');
+        results = fallback?.items || [];
+      }
+      if (results.length > 0) {
+        const best = results[0];
+        const videoId = best.url ? best.url.replace('/watch?v=', '') : null;
+        if (videoId) {
+          let songName = cleanSongTitle(track.title);
+          let artist = cleanSongTitle(track.artist);
+          pl.songs.push({ id: genId(), name: songName, artist, source: 'youtube', videoId });
+          added++;
+        }
+      }
+    } catch(e) { /* skip track */ }
+  }
+
+  saveFS();
+  print('Imported ' + added + '/' + tracks.length + ' tracks from Spotify.', 'info');
+}
+
+commands.rm = async (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = getCurrentPlaylist();
+  if (!pl) return;
+  const input = args.join(' ').trim();
+  if (!input) { print('Usage: rm <song_number|name>', 'error'); return; }
+  let idx = parseInt(input) - 1;
+  if (isNaN(idx)) idx = pl.songs.findIndex(s => s.name.toLowerCase().includes(input.toLowerCase()));
+  if (idx < 0 || idx >= pl.songs.length) { print('rm: song not found', 'error'); return; }
+  const song = pl.songs[idx];
+  if (song.source !== 'youtube') await deleteAudioBlob(song.id);
+  if (currentTrack && currentTrack.playlist === cwd && currentTrack.index === idx) { player.stop(); currentTrack = null; trackNameEl.textContent = 'No track loaded'; }
+  else if (currentTrack && currentTrack.playlist === cwd && currentTrack.index > idx) currentTrack.index--;
+  pl.songs.splice(idx, 1); saveFS();
+  print('Removed: ' + song.name);
+};
+
+commands.mv = async (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  if (args.length < 2) { print('Usage: mv <#> <playlist>', 'error'); return; }
+  const idx = parseInt(args[0]) - 1;
+  const target = args.slice(1).join(' ').trim();
+  const pl = getCurrentPlaylist();
+  if (!pl || idx < 0 || idx >= pl.songs.length) { print('mv: invalid song number', 'error'); return; }
+  if (!fs[target]) { print('mv: playlist "' + target + '" not found', 'error'); return; }
+  const song = pl.songs.splice(idx, 1)[0];
+  fs[target].songs.push(song);
+  if (currentTrack && currentTrack.playlist === cwd && currentTrack.index === idx) currentTrack = { playlist: target, index: fs[target].songs.length - 1 };
+  else if (currentTrack && currentTrack.playlist === cwd && currentTrack.index > idx) currentTrack.index--;
+  saveFS();
+  print('Moved "' + song.name + '" to "' + target + '"');
+};
+
+commands.cp = async (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  if (args.length < 2) { print('Usage: cp <#> <playlist>', 'error'); return; }
+  const idx = parseInt(args[0]) - 1;
+  const target = args.slice(1).join(' ').trim();
+  const pl = getCurrentPlaylist();
+  if (!pl || idx < 0 || idx >= pl.songs.length) { print('cp: invalid song number', 'error'); return; }
+  if (!fs[target]) { print('cp: playlist "' + target + '" not found', 'error'); return; }
+  const song = pl.songs[idx];
+  const newId = genId();
+  if (song.source !== 'youtube') { const blob = await getAudioBlob(song.id); if (blob) await storeAudioBlob(newId, blob); }
+  fs[target].songs.push({ ...song, id: newId });
+  saveFS();
+  print('Copied "' + song.name + '" to "' + target + '"');
+};
+
+commands.cat = (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = getCurrentPlaylist();
+  if (!pl) return;
+  const input = args.join(' ').trim();
+  if (!input) { print('Usage: cat <#>', 'error'); return; }
+  let idx = parseInt(input) - 1;
+  if (isNaN(idx)) idx = pl.songs.findIndex(s => s.name.toLowerCase().includes(input.toLowerCase()));
+  if (idx < 0 || idx >= pl.songs.length) { print('cat: not found', 'error'); return; }
+  const s = pl.songs[idx];
+  print('');
+  print('  Name:     ' + s.name);
+  print('  Artist:   ' + (s.artist || 'Unknown'));
+  print('  Source:   ' + (s.source === 'youtube' ? 'YouTube (' + s.videoId + ')' : 'Local file'));
+  if (s.filename) print('  File:     ' + s.filename);
+  print('  Playlist: ' + cwd);
+  print('  Track #:  ' + (idx + 1) + ' / ' + pl.songs.length);
+  print('  Lyrics:   ' + (s.syncedLyrics ? 'Synced' : s.plainLyrics ? 'Plain' : 'None'));
+  if (s.lyricsOffset) print('  Sync:     ' + s.lyricsOffset.toFixed(1) + 's offset');
+  if (s.endTime) print('  End:      ' + formatTime(s.endTime));
+  print('');
+};
+
+commands.play = async (args) => {
+  const input = args.join(' ').trim();
+  if (!input) {
+    // If in a playlist and it's different from what's playing, start it
+    if (cwd !== '~' && (!currentTrack || currentTrack.playlist !== cwd)) {
+      const pl = getCurrentPlaylist();
+      if (pl && pl.songs.length > 0) { await loadAndPlay(cwd, 0); return; }
+    }
+    // Otherwise resume current track
+    if (currentTrack) { player.play(); return; }
+    if (cwd !== '~') {
+      const pl = getCurrentPlaylist();
+      if (pl && pl.songs.length > 0) { await loadAndPlay(cwd, 0); return; }
+    }
+    print('Nothing to play.', 'warn'); return;
+  }
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  const pl = getCurrentPlaylist();
+  if (!pl) return;
+  let idx = parseInt(input) - 1;
+  if (isNaN(idx)) idx = pl.songs.findIndex(s => s.name.toLowerCase().includes(input.toLowerCase()));
+  if (idx < 0 || idx >= pl.songs.length) { print('play: not found', 'error'); return; }
+  await loadAndPlay(cwd, idx);
+};
+
+commands.pause = () => player.pause();
+commands.stop = () => player.stop();
+commands.next = () => playNext();
+commands.prev = () => playPrev();
+
+commands.shuffle = () => {
+  shuffleOn = !shuffleOn;
+  btnShuffle.style.color = shuffleOn ? 'var(--cyan)' : '';
+  btnShuffle.style.borderColor = shuffleOn ? 'var(--cyan)' : '';
+  print('Shuffle: ' + (shuffleOn ? 'ON' : 'OFF'), 'info');
+};
+
+commands.repeat = () => {
+  repeatMode = (repeatMode + 1) % 3;
+  const labels = ['RPT', 'ALL', 'ONE'], colors = ['', 'var(--cyan)', 'var(--amber)'], names = ['OFF', 'ALL', 'ONE'];
+  btnRepeat.innerHTML = icons[repeatMode];
+  btnRepeat.style.color = colors[repeatMode];
+  btnRepeat.style.borderColor = colors[repeatMode];
+  print('Repeat: ' + names[repeatMode], 'info');
+};
+
+commands.volume = (args) => {
+  const val = parseInt(args[0]);
+  if (isNaN(val) || val < 0 || val > 100) { print('Usage: volume <0-100>', 'error'); return; }
+  player.setVolume(val / 100);
+  volumeSlider.value = val;
+  print('Volume: ' + val + '%');
+};
+
+commands.sync = (args) => {
+  const sub = (args[0] || '').toLowerCase();
+
+  if (sub === 'reset') {
+    lyricsOffset = 0;
+    if (currentTrack) {
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song) { song.lyricsOffset = 0; saveFS(); }
+    }
+    print('Lyrics offset reset to 0.', 'info');
+    return;
+  }
+
+  const val = parseFloat(args[0]);
+  if (!isNaN(val)) {
+    // "sync 9" means "first lyric is heard at 9 seconds" (show 0.5s early)
+    let offset = val - 0.5;
+    if (currentLyrics && currentLyrics.synced && currentLyrics.synced.length > 0) {
+      offset = (val - 0.5) - currentLyrics.synced[0].time;
+    }
+    lyricsOffset = offset;
+    if (currentTrack) {
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song) { song.lyricsOffset = offset; saveFS(); }
+    }
+    print('First lyric set to ' + formatTime(val) + ' (saved)', 'info');
+    return;
+  }
+
+  // No args → open visual sync mode
+  openSyncMode();
+};
+
+commands.end = (args) => {
+  const sub = (args[0] || '').toLowerCase();
+
+  if (sub === 'reset' || sub === 'clear') {
+    if (currentTrack) {
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song) { delete song.endTime; saveFS(); }
+    }
+    print('End point cleared.', 'info');
+    return;
+  }
+
+  // end <mm:ss> or end <seconds>
+  if (args[0]) {
+    let secs;
+    const timeParts = args[0].match(/^(\d+):(\d{2})$/);
+    if (timeParts) {
+      secs = parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
+    } else {
+      secs = parseFloat(args[0]);
+    }
+    if (!isNaN(secs) && currentTrack) {
+      const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+      if (song) { song.endTime = secs; saveFS(); }
+      print('End point set at ' + formatTime(secs) + '.', 'info');
+      return;
+    }
+  }
+
+  // No args → set end at current time
+  if (currentTrack && player.getCurrentTime() > 0) {
+    const now = player.getCurrentTime();
+    const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+    if (song) { song.endTime = now; saveFS(); }
+    print('End point set at ' + formatTime(now) + '. Song will skip to next after this.', 'info');
+    return;
+  }
+
+  print('Usage:', 'bold');
+  print('  end             Set end at current playback time');
+  print('  end <seconds>   Set end at specific time (e.g. end 180)');
+  print('  end <mm:ss>     Set end at timestamp (e.g. end 3:00)');
+  print('  end reset       Clear end point');
+};
+
+commands.grep = (args) => {
+  const query = args.join(' ').trim().toLowerCase();
+  if (!query) { print('Usage: grep <query>', 'error'); return; }
+  let results = [];
+  for (const [plName, pl] of Object.entries(fs)) {
+    pl.songs.forEach((s, i) => {
+      if (s.name.toLowerCase().includes(query) || (s.artist && s.artist.toLowerCase().includes(query))) {
+        results.push({ playlist: plName, song: s, index: i });
+      }
+    });
+  }
+  if (results.length === 0) { print('No matches.', 'dim'); return; }
+  print('Results for "' + query + '":', 'bold');
+  results.forEach(r => {
+    const artist = r.song.artist ? ' - ' + r.song.artist : '';
+    print('  [' + r.playlist + '] #' + (r.index + 1) + '  ' + r.song.name + artist);
+  });
+};
+
+commands.pwd = () => print(cwd === '~' ? '~' : '~/playlists/' + cwd);
+
+commands.rename = (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  if (args.length < 2) { print('Usage: rename <#> <name>', 'error'); return; }
+  const idx = parseInt(args[0]) - 1;
+  const newName = args.slice(1).join(' ').trim();
+  const pl = getCurrentPlaylist();
+  if (!pl || idx < 0 || idx >= pl.songs.length) { print('rename: invalid', 'error'); return; }
+  const old = pl.songs[idx].name;
+  pl.songs[idx].name = newName;
+  saveFS();
+  if (currentTrack && currentTrack.playlist === cwd && currentTrack.index === idx) {
+    trackNameEl.textContent = newName + (pl.songs[idx].artist ? ' - ' + pl.songs[idx].artist : '');
+  }
+  print('Renamed "' + old + '" -> "' + newName + '"');
+};
+
+commands.artist = (args) => {
+  if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+  if (args.length < 2) { print('Usage: artist <#> <name>', 'error'); return; }
+  const idx = parseInt(args[0]) - 1;
+  const name = args.slice(1).join(' ').trim();
+  const pl = getCurrentPlaylist();
+  if (!pl || idx < 0 || idx >= pl.songs.length) { print('artist: invalid', 'error'); return; }
+  pl.songs[idx].artist = name;
+  saveFS();
+  if (currentTrack && currentTrack.playlist === cwd && currentTrack.index === idx) {
+    trackNameEl.textContent = pl.songs[idx].name + ' - ' + name;
+  }
+  print('Set artist for "' + pl.songs[idx].name + '" to "' + name + '"');
+};
+
+commands.queue = () => {
+  if (!currentTrack) { print('Nothing playing.', 'dim'); return; }
+  const pl = fs[currentTrack.playlist];
+  if (!pl) return;
+  print('Queue (' + currentTrack.playlist + '):', 'bold');
+  pl.songs.forEach((s, i) => {
+    const playing = i === currentTrack.index;
+    const prefix = playing ? (player.isPlaying() ? ' \u25b6 ' : ' \u23f8 ') : '   ';
+    const artist = s.artist ? ' - ' + s.artist : '';
+    print('  ' + String(i + 1).padStart(2) + '.' + prefix + s.name + artist, playing ? 'info' : (i < currentTrack.index ? 'dim' : ''));
+  });
+};
+
+commands.lyrics = async (args) => {
+  const sub = (args[0] || '').toLowerCase();
+
+  if (sub === 'fullscreen' || sub === 'fs') {
+    if (lyricsFullscreen) closeLyricsFullscreen();
+    else openLyricsFullscreen();
+    return;
+  }
+
+  if (sub === 'edit') {
+    // Edit lyrics for a specific song or current track
+    let song = null;
+    if (args[1]) {
+      if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+      const pl = getCurrentPlaylist();
+      if (!pl) return;
+      const idx = parseInt(args[1]) - 1;
+      if (idx >= 0 && idx < pl.songs.length) song = pl.songs[idx];
+    } else if (currentTrack) {
+      song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+    }
+    if (!song) { print('No song selected. Use: lyrics edit <#>', 'warn'); return; }
+    openLyricsEditor(song);
+    return;
+  }
+
+  if (sub === 'fetch') {
+    let song = null;
+    if (args[1] && cwd !== '~') {
+      const pl = getCurrentPlaylist();
+      if (pl) { const idx = parseInt(args[1]) - 1; if (idx >= 0 && idx < pl.songs.length) song = pl.songs[idx]; }
+    } else if (currentTrack) {
+      song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+    }
+    if (!song) { print('No song selected.', 'warn'); return; }
+    // Clear cached lyrics and re-fetch
+    song.syncedLyrics = null;
+    song.plainLyrics = null;
+    saveFS();
+    print('Fetching lyrics for "' + song.name + '"...', 'dim');
+    await loadLyricsForSong(song);
+    if (song.syncedLyrics || song.plainLyrics) print('Lyrics found!', 'info');
+    else print('No lyrics found online.', 'warn');
+    return;
+  }
+
+  if (sub === 'show') {
+    if (!currentLyrics) { print('No lyrics loaded.', 'dim'); return; }
+    print('');
+    const text = currentLyrics.plain || (currentLyrics.synced ? currentLyrics.synced.map(l => l.text).join('\n') : '');
+    if (text) print(text); else print('No lyrics.', 'dim');
+    print('');
+    return;
+  }
+
+  // Default: toggle panel
+  toggleLyrics();
+};
+
+commands.clear = () => { output.innerHTML = ''; };
+
+commands.neofetch = () => {
+  const plCount = Object.keys(fs).length;
+  const songCount = Object.values(fs).reduce((a, p) => a + p.songs.length, 0);
+  const ytCount = Object.values(fs).reduce((a, p) => a + p.songs.filter(s => s.source === 'youtube').length, 0);
+  print('');
+  print('   ____            __   ____             __      ', 'bold');
+  print('  / __ )____ _____/ /_ / __ )___  ____ _/ /______', 'bold');
+  print(' / __  / __ `/ __/ __ / __  / _ \\/ __ `/ __/ ___/', 'bold');
+  print('/ /_/ / /_/ (__  / / // /_/ /  __/ /_/ / /_(__  ) ', 'bold');
+  print('\\____/\\__,_/____/_/ /\\____/\\___/\\__,_/\\__/____/  ', 'bold');
+  print('');
+  print('  OS:        BashBeats Terminal v2.0', 'info');
+  print('  Shell:     bashbeats-sh');
+  print('  Playlists: ' + plCount);
+  print('  Tracks:    ' + songCount + (ytCount > 0 ? ' (' + ytCount + ' YouTube)' : ''));
+  print('  Volume:    ' + Math.round(player._volume * 100) + '%');
+  print('  Shuffle:   ' + (shuffleOn ? 'ON' : 'OFF'));
+  print('  Repeat:    ' + ['OFF', 'ALL', 'ONE'][repeatMode]);
+  print('  Lyrics:    ' + (lyricsOpen ? 'Panel open' : 'Panel closed'));
+  print('  Status:    ' + (player.isPlaying() ? 'Playing' : currentTrack ? 'Paused' : 'Idle'));
+  print('');
+};
+
+// ═══════════════════════════════════════════════════════════
+// Settings
+// ═══════════════════════════════════════════════════════════
+const colorNames = {
+  green: '#33ff33', red: '#ff4444', blue: '#4488ff', purple: '#bb44ff',
+  pink: '#ff44aa', cyan: '#33ffff', orange: '#ff8833', yellow: '#ffdd33',
+  white: '#dddddd', lime: '#88ff33', magenta: '#ff33ff', teal: '#33ddaa',
+  amber: '#ffbb33', rose: '#ff6688', sky: '#44bbff', mint: '#33ffaa',
+};
+
+const defaultSettings = {
+  color: '#33ff33',
+  videoBrightness: 0.4,
+  videoBlur: 6,
+  terminalOpacity: 0.78,
+  scanlines: 0.15,
+  autoColor: true,
+};
+
+let settings = { ...defaultSettings };
+
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem('bashbeats_settings');
+    if (saved) settings = { ...defaultSettings, ...JSON.parse(saved) };
+  } catch(e) {}
+  applySettings(true);
+}
+
+function saveSettings(colorChanged) {
+  localStorage.setItem('bashbeats_settings', JSON.stringify(settings));
+  applySettings(colorChanged);
+}
+
+let _autoColorActive = false; // true when thumbnail color is applied
+
+function applyColor(c) {
+  document.documentElement.style.setProperty('--green', c);
+  const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+  document.documentElement.style.setProperty('--dim-green', `rgb(${r>>1},${g>>1},${b>>1})`);
+  document.documentElement.style.setProperty('--dark-green', `rgb(${r>>2},${g>>2},${b>>2})`);
+  document.documentElement.style.setProperty('--glow', `rgba(${r},${g},${b},0.15)`);
+}
+
+function applySettings(includeColor) {
+  // Only reset color if explicitly asked (e.g. color setting changed, or autocolor toggled off)
+  if (includeColor) {
+    if (!_autoColorActive || !settings.autoColor) {
+      applyColor(settings.color);
+    }
+  }
+
+  const filter = `blur(${settings.videoBlur}px) brightness(${settings.videoBrightness}) saturate(1.3)`;
+  document.querySelectorAll('#bg-art iframe, #bg-art #bg-yt-player, #bg-art .bg-thumb, #bg-art #bg-video-proxy').forEach(el => {
+    if (el) el.style.filter = filter;
+  });
+
+  document.getElementById('crt').style.background = `rgba(10,10,10,${settings.terminalOpacity})`;
+
+  const crt = document.getElementById('crt');
+  crt.style.setProperty('--scanline-opacity', settings.scanlines);
+}
+
+commands.settings = (args) => {
+  const key = (args[0] || '').toLowerCase();
+  const val = args.slice(1).join(' ').trim().toLowerCase();
+
+  if (!key) {
+    const colorName = Object.entries(colorNames).find(([,v]) => v === settings.color)?.[0] || settings.color;
+    print('');
+    print('  Settings', 'bold');
+    print('  ────────────────────────────────────────────', 'dim');
+    print('  color <name>       Text color          [' + colorName + ']');
+    print('  video <1-10>       Video visibility    [' + Math.round(settings.videoBrightness * 10) + ']');
+    print('  blur <1-10>        Video blur          [' + Math.round(settings.videoBlur / 2) + ']');
+    print('  overlay <1-10>     Terminal darkness   [' + Math.round(settings.terminalOpacity * 10) + ']');
+    print('  scanlines <1-10>   Retro filter        [' + Math.round(settings.scanlines / 0.03) + ']');
+    print('  autocolor <on|off> Match art colors    [' + (settings.autoColor ? 'on' : 'off') + ']');
+    print('  reset              Reset all');
+    print('');
+    print('  Colors: ' + Object.keys(colorNames).join(', '), 'dim');
+    print('');
+    return;
+  }
+
+  if (key === 'reset') {
+    settings = { ...defaultSettings }; _autoColorActive = false; saveSettings(true);
+    print('Settings reset.', 'info'); return;
+  }
+
+  if (key === 'color') {
+    if (colorNames[val]) {
+      settings.color = colorNames[val]; _autoColorActive = false; saveSettings(true);
+      print('Color: ' + val, 'info');
+    } else if (val.match(/^#[0-9a-fA-F]{6}$/)) {
+      settings.color = val; _autoColorActive = false; saveSettings(true);
+      print('Color: ' + val, 'info');
+    } else {
+      print('Pick a color: ' + Object.keys(colorNames).join(', '), 'dim');
+    }
+    return;
+  }
+
+  if (key === 'video') {
+    const v = parseInt(val);
+    if (isNaN(v) || v < 1 || v > 10) { print('1 (dark) to 10 (bright)', 'error'); return; }
+    settings.videoBrightness = v / 10; saveSettings();
+    print('Video visibility: ' + v + '/10', 'info'); return;
+  }
+
+  if (key === 'blur') {
+    const v = parseInt(val);
+    if (isNaN(v) || v < 1 || v > 10) { print('1 (sharp) to 10 (blurry)', 'error'); return; }
+    settings.videoBlur = v * 2; saveSettings();
+    print('Video blur: ' + v + '/10', 'info'); return;
+  }
+
+  if (key === 'overlay') {
+    const v = parseInt(val);
+    if (isNaN(v) || v < 1 || v > 10) { print('1 (transparent) to 10 (solid)', 'error'); return; }
+    settings.terminalOpacity = v / 10; saveSettings();
+    print('Terminal overlay: ' + v + '/10', 'info'); return;
+  }
+
+  if (key === 'scanlines') {
+    const v = parseInt(val);
+    if (isNaN(v) || v < 0 || v > 10) { print('0 (off) to 10 (heavy)', 'error'); return; }
+    settings.scanlines = v * 0.03; saveSettings();
+    print('Scanlines: ' + v + '/10', 'info'); return;
+  }
+
+  if (key === 'autocolor') {
+    if (val === 'on') { settings.autoColor = true; saveSettings(false); print('Auto color: ON', 'info'); }
+    else if (val === 'off') { settings.autoColor = false; _autoColorActive = false; saveSettings(true); print('Auto color: OFF', 'info'); }
+    else print('Usage: settings autocolor on|off', 'error');
+    return;
+  }
+
+  print('Unknown setting. Type "settings" to see options.', 'error');
+};
+
+commands.echo = (args) => print(args.join(' '));
+commands.whoami = () => print('user');
+commands.ll = commands.ls;
+commands.exit = () => commands.cd(['..']);
+
+commands.man = (args) => {
+  const cmd = args[0];
+  if (!cmd) { print('Usage: man <command>', 'warn'); return; }
+  const pages = {
+    mkdir: 'mkdir <name>\n  Create a new playlist.',
+    rmdir: 'rmdir <name>\n  Delete a playlist and all its songs.',
+    ls: 'ls\n  At root: lists playlists. In a playlist: lists songs.',
+    cd: 'cd <name>\n  Enter a playlist. cd .. goes back to root.',
+    touch: 'touch\n  Opens file picker to import local audio files.\n  You can also drag & drop files onto the terminal.',
+    yt: 'yt <url>\n  Add a YouTube or YouTube Music track by URL.\n  Also imports full playlists!\n\n  Single track:\n    yt https://youtube.com/watch?v=dQw4w9WgXcQ\n\n  Full playlist:\n    yt https://youtube.com/playlist?list=PLxxxxxxx\n    yt https://music.youtube.com/playlist?list=PLxxxxxxx',
+    rm: 'rm <#|name>\n  Remove a song from the current playlist.',
+    mv: 'mv <#> <playlist>\n  Move a song to another playlist.',
+    cp: 'cp <#> <playlist>\n  Copy a song to another playlist.',
+    cat: 'cat <#|name>\n  Show song details including source and lyrics status.',
+    play: 'play [#|name]\n  Play a track. No arg resumes or plays track 1.',
+    pause: 'pause\n  Pause playback.',
+    stop: 'stop\n  Stop playback and reset position.',
+    next: 'next\n  Skip to next track.',
+    prev: 'prev\n  Previous track (or restart if >3s in).',
+    grep: 'grep <query>\n  Search all songs by name or artist.',
+    volume: 'volume <0-100>\n  Set playback volume.',
+    rename: 'rename <#> <name>\n  Rename a song.',
+    artist: 'artist <#> <name>\n  Set the artist for a song.',
+    shuffle: 'shuffle\n  Toggle shuffle on/off.',
+    repeat: 'repeat\n  Cycle: off -> all -> one.',
+    queue: 'queue\n  Show the current play queue.',
+    lyrics: 'lyrics\n  Toggle the lyrics side panel.\n\n  lyrics edit [#]   Open lyrics editor for a song\n  lyrics fetch [#]  Re-fetch lyrics from lrclib.net\n  lyrics show       Print lyrics in terminal',
+    clear: 'clear\n  Clear the terminal screen.',
+  };
+  if (pages[cmd]) print('\n' + pages[cmd] + '\n');
+  else print('No manual entry for "' + cmd + '"', 'error');
+};
+
+// ═══════════════════════════════════════════════════════════
+// Command Parser
+// ═══════════════════════════════════════════════════════════
+async function execute(input) {
+  const trimmed = input.trim();
+  if (!trimmed) return;
+  // Subtle CRT flash on command
+  const crt = document.getElementById('crt');
+  crt.classList.remove('cmd-flash');
+  void crt.offsetWidth; // force reflow
+  crt.classList.add('cmd-flash');
+  const path = cwd === '~' ? '~' : '~/playlists/' + cwd;
+  print('user@bashbeats:' + path + '$ ' + trimmed, 'dim');
+  const parts = trimmed.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1);
+  if (commands[cmd]) await commands[cmd](args);
+  else print('bash: command not found: ' + cmd, 'error');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Input Handling
+// ═══════════════════════════════════════════════════════════
+cmdInput.addEventListener('keydown', async (e) => {
+  if (e.key === 'Enter') {
+    const val = cmdInput.value; cmdInput.value = '';
+    if (val.trim()) { cmdHistory.push(val); historyIdx = cmdHistory.length; }
+    await execute(val);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (historyIdx > 0) { historyIdx--; cmdInput.value = cmdHistory[historyIdx]; }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (historyIdx < cmdHistory.length - 1) { historyIdx++; cmdInput.value = cmdHistory[historyIdx]; }
+    else { historyIdx = cmdHistory.length; cmdInput.value = ''; }
+  } else if (e.key === 'Tab') {
+    e.preventDefault(); autocomplete();
+  } else if (e.key === 'l' && e.ctrlKey) {
+    e.preventDefault(); commands.clear();
+  }
+});
+
+terminal.addEventListener('click', () => cmdInput.focus());
+
+function autocomplete() {
+  const val = cmdInput.value;
+  const parts = val.split(/\s+/);
+  if (parts.length <= 1) {
+    const prefix = parts[0].toLowerCase();
+    const matches = Object.keys(commands).filter(c => c.startsWith(prefix));
+    if (matches.length === 1) cmdInput.value = matches[0] + ' ';
+    else if (matches.length > 1) print(matches.join('  '), 'dim');
+  } else {
+    const partial = parts.slice(1).join(' ').toLowerCase();
+    if (cwd === '~') {
+      const matches = Object.keys(fs).filter(n => n.toLowerCase().startsWith(partial));
+      if (matches.length === 1) cmdInput.value = parts[0] + ' ' + matches[0];
+      else if (matches.length > 1) print(matches.join('  '), 'dim');
+    } else {
+      const pl = getCurrentPlaylist();
+      if (pl) {
+        const matches = pl.songs.filter(s => s.name.toLowerCase().startsWith(partial)).map(s => s.name);
+        if (matches.length === 1) cmdInput.value = parts[0] + ' ' + matches[0];
+        else if (matches.length > 1) print(matches.join('  '), 'dim');
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════════════════
+// YouTube IFrame API global callback
+window.onYouTubeIframeAPIReady = function() { player._initYT(); };
+
+// Wait for splash click
+function waitForSplash() {
+  return new Promise(resolve => {
+    const splash = document.getElementById('splash');
+    splash.addEventListener('click', () => {
+      splash.classList.add('hidden');
+      resolve();
+    }, { once: true });
+  });
+}
+
+async function boot() {
+  // Wait for user click — this gives Chrome autoplay permission
+  await waitForSplash();
+
+  await openDB();
+  loadFS();
+  updatePrompt();
+  player.init();
+  loadSettings();
+  refreshInstances();
+
+  const lines = [
+    { text: '', delay: 200 },
+    { text: '', delay: 50 },
+    { text: '', delay: 50 },
+    { text: 'Initializing audio subsystem...   [OK]', cls: 'info', delay: 250 },
+    { text: 'Loading Piped stream engine...      [OK]', cls: 'info', delay: 200 },
+    { text: 'Connecting to lyrics database...   [OK]', cls: 'info', delay: 200 },
+    { text: 'Mounting /playlists...             [OK]', cls: 'info', delay: 150 },
+    { text: '', delay: 100 },
+  ];
+
+  const plCount = Object.keys(fs).length;
+  const songCount = Object.values(fs).reduce((a, p) => a + p.songs.length, 0);
+  if (plCount > 0) lines.push({ text: 'Found ' + plCount + ' playlist(s), ' + songCount + ' track(s).', delay: 100 });
+  lines.push({ text: '', delay: 50 });
+  lines.push({ text: 'Type "help" for commands. Drag & drop files or use "yt <url>".', cls: 'dim', delay: 50 });
+  lines.push({ text: '', delay: 0 });
+
+  for (const l of lines) {
+    print(l.text, l.cls || '');
+    if (l.delay) await new Promise(r => setTimeout(r, l.delay));
+  }
+
+  cmdInput.focus();
+}
+
+boot();
+
+// Register PWA service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

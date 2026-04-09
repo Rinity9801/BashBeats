@@ -1,0 +1,16 @@
+{
+  "name": "BashBeats",
+  "short_name": "BashBeats",
+  "description": "Your music. Your terminal.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='55' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' fill='%2333ff33'>B</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

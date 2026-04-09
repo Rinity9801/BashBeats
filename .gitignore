@@ -1,0 +1,6 @@
+node_modules/
+dist/
+icon.iconset/
+*.dmg
+*.blockmap
+yt-dlp-bin
