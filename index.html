@@ -972,7 +972,11 @@ function deleteAudioBlob(id) {
 // ═══════════════════════════════════════════════════════════
 // FS Persistence
 // ═══════════════════════════════════════════════════════════
-function saveFS() { localStorage.setItem('bashbeats_fs', JSON.stringify(fs)); }
+function saveFS() {
+  const toSave = {};
+  for (const [k, v] of Object.entries(fs)) { if (!v._temp) toSave[k] = v; }
+  localStorage.setItem('bashbeats_fs', JSON.stringify(toSave));
+}
 function loadFS() { const d = localStorage.getItem('bashbeats_fs'); fs = d ? JSON.parse(d) : {}; }
 
 // ═══════════════════════════════════════════════════════════
@@ -987,7 +991,8 @@ function formatTime(sec) {
 function sanitizeName(name) { return name.replace(/[^a-zA-Z0-9_\-. ]/g, '').trim(); }
 function fileBaseName(fn) { return fn.replace(/\.[^.]+$/, ''); }
 function updatePrompt() {
-  promptEl.textContent = 'user@bashbeats:' + (cwd === '~' ? '~' : '~/playlists/' + cwd) + '$ ';
+  const path = cwd === '~' ? '~' : cwd === '_queue' ? '~/queue' : '~/playlists/' + cwd;
+  promptEl.textContent = 'user@bashbeats:' + path + '$ ';
 }
 function scrollToBottom() { terminal.scrollTop = terminal.scrollHeight; }
 
@@ -1631,6 +1636,11 @@ function playNext() {
     nextIdx = currentTrack.index + 1;
     if (nextIdx >= pl.songs.length) {
       if (repeatMode >= 1) nextIdx = 0;
+      else if (autoplayOn) {
+        // Auto-discover and play a related song
+        autoDiscover();
+        return;
+      }
       else { player.pause(); return; }
     }
   }
@@ -2096,6 +2106,8 @@ commands.help = () => {
   print('  lyrics edit [#]       Edit lyrics for a song');
   print('  lyrics fetch [#]      Re-fetch lyrics from web');
   print('  clear                 Clear terminal');
+  print('  discover              Song recommendations');
+  print('  autoplay              Auto-discover after playlist ends');
   print('  settings              Customize colors, video, overlay');
   print('  neofetch              System info');
   print('  help                  Show this help');
@@ -2127,7 +2139,7 @@ commands.rmdir = async (args) => {
 
 commands.ls = () => {
   if (cwd === '~') {
-    const names = Object.keys(fs);
+    const names = Object.keys(fs).filter(n => !fs[n]._temp);
     if (names.length === 0) { print('No playlists yet. Use mkdir <name> to create one.', 'dim'); return; }
     print('Playlists:', 'bold');
     names.forEach(name => {
@@ -2316,12 +2328,10 @@ commands.cat = (args) => {
 commands.play = async (args) => {
   const input = args.join(' ').trim();
   if (!input) {
-    // If in a playlist and it's different from what's playing, start it
     if (cwd !== '~' && (!currentTrack || currentTrack.playlist !== cwd)) {
       const pl = getCurrentPlaylist();
       if (pl && pl.songs.length > 0) { await loadAndPlay(cwd, 0); return; }
     }
-    // Otherwise resume current track
     if (currentTrack) { player.play(); return; }
     if (cwd !== '~') {
       const pl = getCurrentPlaylist();
@@ -2329,6 +2339,29 @@ commands.play = async (args) => {
     }
     print('Nothing to play.', 'warn'); return;
   }
+
+  // Play a YouTube URL directly — temporary queue, not saved
+  const videoId = parseYouTubeURL(input);
+  if (videoId) {
+    // Create/reset temporary queue (not saved to localStorage)
+    fs['_queue'] = { songs: [], created: Date.now(), _temp: true };
+
+    const title = await fetchVideoTitle(videoId);
+    const name = title || ('YouTube ' + videoId);
+    let songName = name, artist = '';
+    const dash = name.match(/^(.+?)\s*[-\u2013\u2014]\s*(.+)$/);
+    if (dash) { artist = dash[1].trim(); songName = dash[2].trim(); }
+    songName = cleanSongTitle(songName);
+    artist = cleanSongTitle(artist);
+
+    fs['_queue'].songs.push({ id: genId(), name: songName, artist, source: 'youtube', videoId });
+    cwd = '_queue';
+    updatePrompt();
+    autoplayOn = true;
+    await loadAndPlay('_queue', 0);
+    return;
+  }
+
   if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
   const pl = getCurrentPlaylist();
   if (!pl) return;
@@ -2734,6 +2767,123 @@ commands.settings = (args) => {
 
   print('Unknown setting. Type "settings" to see options.', 'error');
 };
+
+// ═══════════════════════════════════════════════════════════
+// Discover — song recommendations
+// ═══════════════════════════════════════════════════════════
+let _discoverResults = [];
+let autoplayOn = false;
+
+async function fetchRelated(videoId) {
+  // Try yt-dlp proxy for related videos (most reliable in Electron)
+  try {
+    const resp = await fetch('http://127.0.0.1:18899/info/' + videoId);
+    if (resp.ok) {
+      // yt-dlp info doesn't have related, fall through to Piped
+    }
+  } catch(e) {}
+
+  // Use Piped for related streams
+  const data = await fetchFromPiped('/streams/' + videoId);
+  if (data && data.relatedStreams) {
+    return data.relatedStreams
+      .filter(s => s.type === 'stream' && s.url)
+      .slice(0, 15)
+      .map(s => {
+        const vid = s.url.replace('/watch?v=', '');
+        const title = s.title || '';
+        let songName = title, artist = s.uploaderName || '';
+        const dash = title.match(/^(.+?)\s*[-\u2013\u2014]\s*(.+)$/);
+        if (dash) { artist = dash[1].trim(); songName = dash[2].trim(); }
+        songName = cleanSongTitle(songName);
+        artist = cleanSongTitle(artist);
+        return { videoId: vid, name: songName, artist, duration: s.duration };
+      });
+  }
+  return [];
+}
+
+commands.discover = async (args) => {
+  const sub = (args[0] || '').toLowerCase();
+
+  // discover add <#> — add a result to current playlist
+  if (sub === 'add' && args[1]) {
+    const idx = parseInt(args[1]) - 1;
+    if (idx < 0 || idx >= _discoverResults.length) { print('Invalid number.', 'error'); return; }
+    if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+    const r = _discoverResults[idx];
+    const pl = fs[cwd];
+    if (pl) {
+      pl.songs.push({ id: genId(), name: r.name, artist: r.artist, source: 'youtube', videoId: r.videoId });
+      saveFS();
+      print('Added: ' + r.name + (r.artist ? ' - ' + r.artist : ''), 'info');
+    }
+    return;
+  }
+
+  // discover play <#> — play a result immediately
+  if (sub === 'play' && args[1]) {
+    const idx = parseInt(args[1]) - 1;
+    if (idx < 0 || idx >= _discoverResults.length) { print('Invalid number.', 'error'); return; }
+    if (cwd === '~') { print('cd into a playlist first.', 'warn'); return; }
+    const r = _discoverResults[idx];
+    const pl = fs[cwd];
+    if (pl) {
+      pl.songs.push({ id: genId(), name: r.name, artist: r.artist, source: 'youtube', videoId: r.videoId });
+      saveFS();
+      await loadAndPlay(cwd, pl.songs.length - 1);
+    }
+    return;
+  }
+
+  // discover — show recommendations based on current song
+  if (!currentTrack) { print('Play a song first.', 'warn'); return; }
+  const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+  if (!song || !song.videoId) { print('No YouTube track playing.', 'warn'); return; }
+
+  print('Finding songs like "' + song.name + '"...', 'dim');
+  _discoverResults = await fetchRelated(song.videoId);
+
+  if (_discoverResults.length === 0) { print('No recommendations found.', 'dim'); return; }
+
+  print('');
+  print('  Recommended', 'bold');
+  print('  ──────────────────────────────────────', 'dim');
+  _discoverResults.forEach((r, i) => {
+    const dur = r.duration ? ' (' + formatTime(r.duration) + ')' : '';
+    print('  ' + String(i + 1).padStart(2) + '. ' + r.name + (r.artist ? ' - ' + r.artist : '') + dur);
+  });
+  print('');
+  print('  discover add <#>   Add to playlist', 'dim');
+  print('  discover play <#>  Play now & add', 'dim');
+  print('');
+};
+
+// Autoplay — keep playing recommended songs after playlist ends
+commands.autoplay = () => {
+  autoplayOn = !autoplayOn;
+  print('Autoplay: ' + (autoplayOn ? 'ON — will discover new songs after playlist ends' : 'OFF'), 'info');
+};
+
+async function autoDiscover() {
+  if (!currentTrack) return;
+  const song = fs[currentTrack.playlist]?.songs[currentTrack.index];
+  if (!song || !song.videoId) { player.pause(); return; }
+
+  const related = await fetchRelated(song.videoId);
+  if (related.length === 0) { player.pause(); return; }
+
+  // Pick the first recommendation that isn't already in the playlist
+  const pl = fs[currentTrack.playlist];
+  const existingIds = new Set(pl.songs.map(s => s.videoId));
+  const pick = related.find(r => !existingIds.has(r.videoId)) || related[0];
+
+  // Add to playlist and play
+  pl.songs.push({ id: genId(), name: pick.name, artist: pick.artist, source: 'youtube', videoId: pick.videoId });
+  saveFS();
+  print('Autoplay: ' + pick.name + (pick.artist ? ' - ' + pick.artist : ''), 'info');
+  await loadAndPlay(currentTrack.playlist, pl.songs.length - 1);
+}
 
 commands.echo = (args) => print(args.join(' '));
 commands.whoami = () => print('user');
