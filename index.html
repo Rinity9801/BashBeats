@@ -1588,7 +1588,11 @@ function getNextIndex() {
   if (!currentTrack) return null;
   const pl = fs[currentTrack.playlist];
   if (!pl || pl.songs.length === 0) return null;
-  if (shuffleOn) return Math.floor(Math.random() * pl.songs.length);
+  if (shuffleOn) {
+    if (pl.songs.length <= 1) return 0;
+    let r; do { r = Math.floor(Math.random() * pl.songs.length); } while (r === currentTrack.index);
+    return r;
+  }
   const next = currentTrack.index + 1;
   if (next >= pl.songs.length) return repeatMode >= 1 ? 0 : null;
   return next;
@@ -1631,7 +1635,11 @@ function playNext() {
   if (!pl || pl.songs.length === 0) return;
   let nextIdx;
   if (shuffleOn) {
-    nextIdx = Math.floor(Math.random() * pl.songs.length);
+    if (pl.songs.length <= 1) { nextIdx = 0; }
+    else {
+      do { nextIdx = Math.floor(Math.random() * pl.songs.length); }
+      while (nextIdx === currentTrack.index);
+    }
   } else {
     nextIdx = currentTrack.index + 1;
     if (nextIdx >= pl.songs.length) {
@@ -2096,6 +2104,7 @@ commands.help = () => {
   print('  volume <0-100>        Set volume');
   print('  sync                  Visual lyrics sync tool');
   print('  end                   Set song end point (skip outros)');
+  print('  search <query>        Search YouTube and pick a song');
   print('  grep <query>          Search all songs');
   print('  pwd                   Show current location');
   print('  rename <#> <name>     Rename a song');
@@ -2330,12 +2339,18 @@ commands.play = async (args) => {
   if (!input) {
     if (cwd !== '~' && (!currentTrack || currentTrack.playlist !== cwd)) {
       const pl = getCurrentPlaylist();
-      if (pl && pl.songs.length > 0) { await loadAndPlay(cwd, 0); return; }
+      if (pl && pl.songs.length > 0) {
+        const start = shuffleOn ? Math.floor(Math.random() * pl.songs.length) : 0;
+        await loadAndPlay(cwd, start); return;
+      }
     }
     if (currentTrack) { player.play(); return; }
     if (cwd !== '~') {
       const pl = getCurrentPlaylist();
-      if (pl && pl.songs.length > 0) { await loadAndPlay(cwd, 0); return; }
+      if (pl && pl.songs.length > 0) {
+        const start = shuffleOn ? Math.floor(Math.random() * pl.songs.length) : 0;
+        await loadAndPlay(cwd, start); return;
+      }
     }
     print('Nothing to play.', 'warn'); return;
   }
@@ -2885,6 +2900,73 @@ async function autoDiscover() {
   await loadAndPlay(currentTrack.playlist, pl.songs.length - 1);
 }
 
+// ── Search YouTube ──
+let searchResults = null; // holds results while user picks
+
+commands.search = async (args) => {
+  const query = args.join(' ').trim();
+  if (!query) { print('Usage: search <song name or keywords>', 'error'); return; }
+
+  print('Searching YouTube for "' + query + '"...', 'dim');
+
+  let results = [];
+
+  // Try local yt-dlp proxy first (Electron)
+  try {
+    const resp = await fetch('http://127.0.0.1:18899/search?q=' + encodeURIComponent(query), { signal: AbortSignal.timeout(20000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.results && data.results.length > 0) results = data.results;
+    }
+  } catch(e) { /* fall through to Piped */ }
+
+  // Fallback to Piped API
+  if (results.length === 0) {
+    try {
+      const data = await fetchFromPiped('/search?q=' + encodeURIComponent(query) + '&filter=music_songs');
+      const items = data?.items || [];
+      if (items.length === 0) {
+        const fallback = await fetchFromPiped('/search?q=' + encodeURIComponent(query) + '&filter=videos');
+        results = (fallback?.items || []).slice(0, 10).map(v => ({
+          videoId: v.url ? v.url.replace('/watch?v=', '') : '',
+          title: v.title || '',
+          artist: v.uploaderName || v.uploader || '',
+          duration: v.duration || 0,
+        }));
+      } else {
+        results = items.slice(0, 10).map(v => ({
+          videoId: v.url ? v.url.replace('/watch?v=', '') : '',
+          title: v.title || '',
+          artist: v.uploaderName || v.uploader || '',
+          duration: v.duration || 0,
+        }));
+      }
+    } catch(e) { /* no results */ }
+  }
+
+  if (results.length === 0) {
+    print('No results found.', 'warn');
+    return;
+  }
+
+  // Display results
+  print('');
+  print('  Search Results', 'bold');
+  print('  ──────────────────────────────────────────', 'dim');
+  results.forEach((r, i) => {
+    const dur = r.duration ? formatTime(r.duration) : '??:??';
+    const num = String(i + 1).padStart(2, ' ');
+    print('  ' + num + '.  ' + r.title, 'info');
+    print('        ' + r.artist + '  [' + dur + ']', 'dim');
+  });
+  print('');
+  print('  Type a number to play, or 0 to cancel.', 'warn');
+  print('');
+
+  // Store results for selection
+  searchResults = results;
+};
+
 commands.echo = (args) => print(args.join(' '));
 commands.whoami = () => print('user');
 commands.ll = commands.ls;
@@ -2909,6 +2991,7 @@ commands.man = (args) => {
     stop: 'stop\n  Stop playback and reset position.',
     next: 'next\n  Skip to next track.',
     prev: 'prev\n  Previous track (or restart if >3s in).',
+    search: 'search <query>\n  Search YouTube for a song.\n  Displays up to 10 results — type a number to play it.\n  If you\'re inside a playlist, the song is added there.\n\n  Example:\n    search bohemian rhapsody\n    3',
     grep: 'grep <query>\n  Search all songs by name or artist.',
     volume: 'volume <0-100>\n  Set playback volume.',
     rename: 'rename <#> <name>\n  Rename a song.',
@@ -2936,6 +3019,46 @@ async function execute(input) {
   crt.classList.add('cmd-flash');
   const path = cwd === '~' ? '~' : '~/playlists/' + cwd;
   print('user@bashbeats:' + path + '$ ' + trimmed, 'dim');
+
+  // Handle search result selection
+  if (searchResults) {
+    const pick = parseInt(trimmed);
+    if (pick === 0) {
+      searchResults = null;
+      print('Search cancelled.', 'dim');
+      return;
+    }
+    if (!isNaN(pick) && pick >= 1 && pick <= searchResults.length) {
+      const r = searchResults[pick - 1];
+      searchResults = null;
+
+      // Parse artist - title from the result
+      let songName = r.title, artist = r.artist;
+      const dash = r.title.match(/^(.+?)\s*[-\u2013\u2014]\s*(.+)$/);
+      if (dash) { artist = dash[1].trim(); songName = dash[2].trim(); }
+      songName = cleanSongTitle(songName);
+      artist = cleanSongTitle(artist);
+
+      // If in a playlist, add it there
+      if (cwd !== '~' && fs[cwd]) {
+        fs[cwd].songs.push({ id: genId(), name: songName, artist, source: 'youtube', videoId: r.videoId });
+        saveFS();
+        print('Added to "' + cwd + '": ' + songName + ' - ' + artist);
+        await loadAndPlay(cwd, fs[cwd].songs.length - 1);
+      } else {
+        // Create temp queue and play
+        fs['_queue'] = { songs: [], created: Date.now(), _temp: true };
+        fs['_queue'].songs.push({ id: genId(), name: songName, artist, source: 'youtube', videoId: r.videoId });
+        cwd = '_queue'; updatePrompt();
+        autoplayOn = true;
+        await loadAndPlay('_queue', 0);
+      }
+      return;
+    }
+    // Not a valid number — clear search mode and process as normal command
+    searchResults = null;
+  }
+
   const parts = trimmed.split(/\s+/);
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);

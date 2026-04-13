@@ -178,6 +178,46 @@ function startProxy() {
       return;
     }
 
+    // GET /search?q=... — search YouTube via yt-dlp
+    if (url.pathname === '/search') {
+      const query = url.searchParams.get('q') || '';
+      if (!query) { res.writeHead(400); res.end('No query'); return; }
+
+      execFile(YTDLP, [
+        '--dump-json',
+        '--default-search', 'ytsearch10',
+        '--no-playlist',
+        '--no-warnings',
+        '--no-check-certificates',
+        '--flat-playlist',
+        'ytsearch10:' + query
+      ], { timeout: 20000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+        if (err || !stdout) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Search failed' }));
+          return;
+        }
+        try {
+          // yt-dlp outputs one JSON object per line
+          const results = stdout.trim().split('\n').map(line => {
+            const d = JSON.parse(line);
+            return {
+              videoId: d.id,
+              title: d.title || d.fulltitle || '',
+              artist: d.uploader || d.channel || '',
+              duration: d.duration || 0,
+            };
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ results }));
+        } catch(e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Parse error' }));
+        }
+      });
+      return;
+    }
+
     res.writeHead(404); res.end('Not found');
   });
 
